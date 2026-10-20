@@ -6,7 +6,8 @@
  * when the answer moved. The channel has no push endpoint in v1 — polling is
  * the documented substitute (requirements §4.2 open question). A failed call
  * does not hide a previously good list; it flips the phase so the view can
- * show the channel-missing state.
+ * show the channel-missing state. A call that never answers is given up on
+ * after the request timeout, so one hung request cannot wedge the source.
  *
  * @module @dsh-electron/dsh-auto-review-panel/client/source
  */
@@ -18,10 +19,13 @@ import type { PanelSnapshot } from './model.ts'
 /** Default polling interval for the push-free channel. */
 export const POLL_INTERVAL_MS = 3000
 
+/** How long one list call may take before the source abandons it. */
+export const REQUEST_TIMEOUT_MS = 10_000
+
 /** One polling source's dependencies, injectable for tests. */
 export interface RecordsSourceOptions {
   readonly intervalMs?: number
-  readonly now?: () => number
+  readonly timeoutMs?: number
 }
 
 /** A records source with an explicit one-shot refresh for the toolbar. */
@@ -44,6 +48,7 @@ export function createRecordsSource(
   options: RecordsSourceOptions = {},
 ): RecordsSource {
   const intervalMs = options.intervalMs ?? POLL_INTERVAL_MS
+  const timeoutMs = options.timeoutMs ?? REQUEST_TIMEOUT_MS
   let snapshot: PanelSnapshot = api === undefined ? { phase: 'failed' } : { phase: 'loading' }
   let lastValue: string | undefined
   const listeners = new Set<() => void>()
@@ -59,8 +64,14 @@ export function createRecordsSource(
   const poll = async (): Promise<void> => {
     if (api === undefined || inFlight) return
     inFlight = true
+    let timeout: ReturnType<typeof setTimeout> | undefined
     try {
-      const value = await api.list(sessionId)
+      const value = await Promise.race([
+        api.list(sessionId),
+        new Promise<never>((_resolve, reject) => {
+          timeout = setTimeout(() => reject(new Error('auto review panel: list request timed out')), timeoutMs)
+        }),
+      ])
       // Identity on the wire content, not the envelope: equal answers must not
       // churn the subscription, unequal ones must always republish.
       const encoded = JSON.stringify(value)
@@ -73,6 +84,7 @@ export function createRecordsSource(
     } catch {
       publish({ phase: 'failed' })
     } finally {
+      if (timeout !== undefined) clearTimeout(timeout)
       inFlight = false
     }
   }

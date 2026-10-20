@@ -93,7 +93,7 @@ function makeT(dict: Record<string, string>) {
 function mount(options: {
   list?: () => PanelListValue
   listError?: () => unknown
-  get?: () => unknown
+  get?: (id: string) => unknown
   connection?: boolean
 } = {}) {
   const calls: Call[] = []
@@ -106,7 +106,10 @@ function mount(options: {
       call: async (channel: string, endpoint: string, payload: unknown) => {
         calls.push({ channel, endpoint, payload })
         if (options.listError !== undefined) throw options.listError()
-        if (endpoint === 'get') return { ok: true, value: (options.get ?? (() => record()))() }
+        if (endpoint === 'get') {
+          const id = (payload as { id?: string }).id ?? ''
+          return { ok: true, value: (options.get ?? (() => record()))(id) }
+        }
         return { ok: true, value: (options.list ?? listValue)() }
       },
     },
@@ -404,6 +407,34 @@ describe('the detail view', () => {
     const overview = container.querySelector('.arp-overview')!
     expect(overview.textContent).not.toContain(zh['detail.downstream'])
     expect(overview.textContent).not.toContain(zh['detail.hostOutcome'])
+  })
+
+  it('keeps the newer selection when an earlier get resolves late', async () => {
+    const gates = new Map<string, PromiseWithResolvers<ReviewRecord>>()
+    const harness = mount({
+      list: () => listValue({
+        records: [
+          summary({ id: 'r1', action: { name: 'read_file', mode: 'native' } }),
+          summary({ id: 'r2', action: { name: 'write_file', mode: 'native' } }),
+        ],
+      }),
+      get: (id) => {
+        const gate = Promise.withResolvers<ReviewRecord>()
+        gates.set(id, gate)
+        return gate.promise
+      },
+    })
+    const { container } = renderPane(harness)
+    await screen.findByText('read_file')
+    fireEvent.click(screen.getByText('read_file').closest('.arp-row')!)
+    // The still-loading detail can be left behind; its late answer must not win.
+    fireEvent.click(await screen.findByRole('button', { name: `‹ ${zh['detail.back']}` }))
+    fireEvent.click(screen.getByText('write_file').closest('.arp-row')!)
+    gates.get('r2')!.resolve(record({ id: 'r2', provider: 'new-provider', model: 'new-model' }))
+    await screen.findByText('new-provider/new-model')
+    gates.get('r1')!.resolve(record({ id: 'r1', provider: 'stale-provider', model: 'stale-model' }))
+    await waitFor(() => expect(screen.queryByText('stale-provider/stale-model')).toBeNull())
+    expect(container.textContent).toContain('new-provider/new-model')
   })
 
   it('never renders REVIEW_POLICY inside the detail', async () => {

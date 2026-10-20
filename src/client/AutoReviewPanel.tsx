@@ -15,7 +15,7 @@
  * @module @dsh-electron/dsh-auto-review-panel/client/AutoReviewPanel
  */
 
-import { createElement, useCallback, useState, type ReactNode } from 'react'
+import { createElement, useCallback, useRef, useState, type ReactNode } from 'react'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import type { InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { SessionId } from '@deepseek-ai/dsh-session'
@@ -369,17 +369,26 @@ export function AutoReviewPanel(props: AutoReviewPanelProps): ReactNode {
   const [about, setAbout] = useState(false)
   const [policy, setPolicy] = useState<string | undefined>()
 
+  // Each open bumps the request serial; a get that resolves late must not
+  // overwrite the detail of a selection made after it.
+  const detailRequest = useRef(0)
+
   const openRecord = useCallback((id: string) => {
     setSelectedId(id)
     setDetail(undefined)
-    const controller = new AbortController()
-    void getRecord(id, controller.signal).then(record => {
-      if (!controller.signal.aborted) setDetail(record ?? 'missing')
+    const request = ++detailRequest.current
+    void getRecord(id).then(record => {
+      if (request === detailRequest.current) setDetail(record ?? 'missing')
     }, () => {
-      if (!controller.signal.aborted) setDetail('missing')
+      if (request === detailRequest.current) setDetail('missing')
     })
-    return () => controller.abort()
   }, [getRecord])
+
+  const closeRecord = useCallback(() => {
+    detailRequest.current += 1
+    setSelectedId(undefined)
+    setDetail(undefined)
+  }, [])
 
   const openAbout = useCallback(() => {
     setAbout(true)
@@ -393,15 +402,19 @@ export function AutoReviewPanel(props: AutoReviewPanelProps): ReactNode {
 
   if (selectedId !== undefined) {
     const record = detail
+    const backButton = e(Button, { variant: 'ghost', size: 'sm', className: 'arp-link', onClick: closeRecord }, `‹ ${t('detail.back')}`)
     return e('div', { className: 'arp-panel' },
-      record === undefined ? e('div', { className: 'arp-loading' }, e(TextShimmer, { active: true, children: t('list.loading') }))
+      // The back affordance stays mounted while a get is in flight — a slow or
+      // hung host endpoint must not trap the user on the shimmer.
+      record === undefined
+        ? e('div', { className: 'arp-detail' }, backButton,
+          e('div', { className: 'arp-loading' }, e(TextShimmer, { active: true, children: t('list.loading') })))
         : record === 'missing'
-          ? e('div', { className: 'arp-detail' },
-              e(Button, { variant: 'ghost', size: 'sm', className: 'arp-link', onClick: () => { setSelectedId(undefined); setDetail(undefined) } }, `‹ ${t('detail.back')}`),
+          ? e('div', { className: 'arp-detail' }, backButton,
               e('div', { className: 'arp-empty-body' }, t('detail.missing')))
           : e(RecordDetail, {
               record,
-              onBack: () => { setSelectedId(undefined); setDetail(undefined) },
+              onBack: closeRecord,
               t,
             }))
   }
