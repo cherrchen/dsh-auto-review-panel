@@ -9,7 +9,7 @@
 | --- | --- | --- | --- |
 | 初始化 | bundle 骨架（compat/panel/client-anchor 三行）、兼容性契约、host/client 构建、tests、组合冒烟、打包门禁、lefthook、CI/release/upgrade/diag 工作流、docs 体系、双语 README/CHANGELOG | 完成（2026-10-20） | 未发版（`v0.0.0`） |
 | M1 | 审查记录捕获（宿主半部）：`llm/stream` 只读 tee + 结构指纹 + `pre-execute` 关联锚（`downstreamDecision`）+ 环形缓冲 + `PANEL_CHANNEL` list/get 端点 | 完成（2026-10-20） | — |
-| M2 | sidebar.right 面板（客户端半部）：tab 类型注册 + `sidebar.right.pane.tab` 面板体、列表/详情、四种空态、双语 | 未开始 | — |
+| M2 | sidebar.right 面板（客户端半部）：tab 类型注册 + `sidebar.right.pane.tab` 面板体、列表/详情、四种空态、双语 | 完成（2026-10-20） | — |
 | M3 | 打磨与首发：关联/结局佐证增强、缓冲实测调参、真实组合验收、演示 GIF、首版发版 | 未开始 | `v0.1.0` |
 
 ### 初始化（2026-10-20）
@@ -45,7 +45,7 @@
 
 **验证证据（2026-10-20）**：`pnpm verify:all` 全绿——lint / typecheck / build / vitest 98 通过（`review-capture.spec.ts` 指纹正负例 + fork fixture + tee 双侧故障注入 + error/aborted 落 `finish` + 关联与歧义拒绝；`review-records.spec.ts` 双环帽与会话过滤恒含未关联；`review-channel.spec.ts` list/get 形状、status 两态、bad-request/unknown-endpoint、headless 不挂通道不炸）/ `smoke:compose` 17 项 / `pack:check` 25 成员 / `smoke:packed`；`compat:check` 与 `docs:check` 独立通过。架构文档 [`docs/architecture/auto-review-panel.md`](../../architecture/auto-review-panel.md) 同批收拢数据流/通道/空态判定。
 
-## M2：sidebar.right 面板（客户端半部，未开始）
+## M2：sidebar.right 面板（客户端半部，完成 2026-10-20）
 
 > 目标：逐条检索、阅读审查记录——第一个用户可见能力。形态对齐 session-inspector，信息密度按[需求 §4.3 精简原则](../../requirements/auto-review-panel.md)收敛。
 
@@ -54,6 +54,10 @@
 - 详情渐进披露：默认只展开裁决卡；其余（历史/约束/环境/模型原文）折叠；REVIEW_POLICY 只在 About；不重复轨迹工具卡——关联成功时提供"在轨迹中定位该调用"导航。
 - 四种空态如实区分：reviewer bundle 未启用/未安装（经 Auto preset 目录探测）、会话非 Auto、通道缺席、尚无记录。
 - 验证：tab 注册、五字段列表行、默认展开面核查、空态四态、双语；端到端用真实 AUTO 会话验收（official bundle 精确版 `0.2.1-rc.2`）。
+
+**验证证据（2026-10-20）**：`pnpm verify:all` 全绿——lint / typecheck / build（`lib/client.js` 33.6 kB 闭包工厂）/ vitest 119 通过（新增 `client-panel.spec.tsx` 21 项：两阶段挂载、通道 (channel, endpoint, payload) 三元组、五字段行结构与 allow 协议文案、failed chip、未关联组恒可见、risk/decision 多选下拉（字段名不进选项）、图标按钮位、四种空态逐一复现〔① `reviewerAvailable:false`、② `sessionPreset:'workspace-write'`、③ connection 缺席与调用失败两路、④ 空记录含 `sessionPreset` 缺席并入〕、详情仅裁决卡默认展开、FILTERED_HISTORY 原始 kind/role 呈现、REVIEW_POLICY 只在 About、zh/en 键集对齐）/ `smoke:compose` 17 项 / `pack:check` / `smoke:packed`；`compat:check` 与 `docs:check` 独立通过。架构文档 §5 同批收拢客户端数据流。
+
+**如实边界**：轨迹定位整体撤销——0.2.1-rc.2 下可见 tab 切换与 call 级 focus 都走 `conversation.session` 私有 inject 面的 store actions，公开服务面没有写口；持久化偏好与 DOM 手势两条绕路要么只对重挂载生效、要么依赖私有 DOM 契约，均达不到"点击即达"的真实效果。按"无可靠接缝宁可不提供"原则，`inspectCall`/`navigation.ts` 及其 inject（`uiSession`/`uiConversation`/sessions 绑定、`uiWorkspace`/`configForms` 可选读）整体移除，不再提供该按钮。
 
 ## M3：打磨与首发（未开始）
 

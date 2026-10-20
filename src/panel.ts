@@ -45,6 +45,22 @@ export default class AutoReviewPanelService extends Service {
       sessions: ctx.sessions,
       autoPreset: AUTO_PRESET,
       runCodeName: RUN_CODE_NAME,
+      listPluginNames: () => {
+        try {
+          const names: string[] = []
+          for (const runtime of ctx.root.registry.values()) {
+            const fibers = (runtime as { fibers?: Iterable<{ entry?: { options?: { name?: unknown } } }> }).fibers
+            if (fibers === undefined) continue
+            for (const fiber of fibers) {
+              const name = fiber.entry?.options?.name
+              if (typeof name === 'string') names.push(name)
+            }
+          }
+          return names
+        } catch {
+          return []
+        }
+      },
     })
 
     // Appended observers: the reviewer's own prepend listener must stay the

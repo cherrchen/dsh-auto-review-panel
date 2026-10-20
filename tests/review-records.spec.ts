@@ -155,11 +155,27 @@ describe('list rows', () => {
     expect(summarizeRecord(stored)).toEqual({
       id: 'r1',
       capturedAt: '2026-10-20T12:00:01.000Z',
-      action: { name: 'read_file', mode: 'native' },
+      action: { name: 'read_file', mode: 'native', preview: 'README.md' },
       risk: 'low',
       decision: 'allow',
       correlated: true,
     })
+  })
+
+  it('project the identifying argument onto a one-line preview', () => {
+    const buffer = new ReviewRecordBuffer()
+    // `command` wins over other string members, matching exec-style calls.
+    const exec = record('r1')
+    exec.sections.pendingAction = { mode: 'native', name: 'bash', arguments: { command: 'rm -rf x\nsecond', silent: false } }
+    expect(summarizeRecord(buffer.add(exec)).action.preview).toBe('rm -rf x')
+    // `file_path` (snake_case) wins over a payload member like `content`.
+    const write = record('r2')
+    write.sections.pendingAction = { mode: 'native', name: 'write_file', arguments: { content: 'payload', file_path: '/work/a.ts' } }
+    expect(summarizeRecord(buffer.add(write)).action.preview).toBe('/work/a.ts')
+    // A non-object or string-less arguments value previews nothing.
+    const bare = record('r3')
+    bare.sections.pendingAction = { mode: 'native', name: 'noop', arguments: { count: 3 } }
+    expect(summarizeRecord(buffer.add(bare)).action.preview).toBeUndefined()
   })
 
   it('truncate a long reason without inventing text', () => {

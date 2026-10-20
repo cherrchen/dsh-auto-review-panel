@@ -1,0 +1,158 @@
+/**
+ * Auto Review Panel copy: the `auto-review-panel` locale namespace.
+ *
+ * Every user-visible string lives here; the host side carries no copy at all
+ * because records, codes, and section identities are the shared vocabulary
+ * (see contract.ts). `t` is bound per namespace by the framework.
+ *
+ * @module @dsh-electron/dsh-auto-review-panel/client/locales
+ */
+
+/** Namespace owned by this plugin's panel. */
+export const NS = 'auto-review-panel'
+
+/** Simplified Chinese labels and dictionary keys. */
+export const zh = {
+  'tab.title': '审查记录',
+  'tab.description': '查看 Auto 预设审查器对每次工具调用的裁决与依据',
+  'about.label': '关于',
+  'about.close': '关闭',
+  'about.title': 'Auto Review 审查面板',
+  'about.body': '审查器：{package}',
+  'about.policy': '审查器使用的固定策略（REVIEW_POLICY）',
+  'about.policy.empty': 'REVIEW_POLICY 全文随每条记录逐字捕获；尚无记录可展示。',
+  'about.reviewer.unknown': '未检测到',
+  'filter.risk': '风险',
+  'filter.decision': '裁决',
+  'filter.all': '全部',
+  'filter.risk.low': '低风险',
+  'filter.risk.medium': '中风险',
+  'filter.risk.high': '高风险',
+  'chip.allow': '放行',
+  'chip.deny': '拒绝',
+  'chip.error': '异常',
+  'chip.failed': '失败',
+  'risk.low': '低',
+  'risk.medium': '中',
+  'risk.high': '高',
+  'mode.native': 'native',
+  'mode.ptc-inner': 'ptc-inner',
+  'group.session': '当前会话',
+  'group.uncorrelated': '未关联',
+  'reason.none': '裁决协议不携带理由',
+  'list.loading': '正在加载审查记录…',
+  'list.refresh': '刷新',
+  'empty.reviewer-unavailable.title': 'Auto Review 未启用',
+  'empty.reviewer-unavailable.body': '官方 @deepseek-ai/dsh-experimental-auto-review bundle 未启用或未安装。请在插件管理器中启用附带版本后重试。',
+  'empty.not-auto.title': '当前会话未使用 Auto 预设',
+  'empty.not-auto.body': '审查器只在 Auto 权限预设下裁决工具调用；此会话当前预设为“{preset}”，不产生审查记录。',
+  'empty.channel-missing.title': '面板通道不可用',
+  'empty.channel-missing.body': '宿主侧未注册审查通道——连接尚未就绪、宿主版本不含此端点，或面板服务未能启动。宿主捕获不受影响。',
+  'empty.no-records.title': '尚无审查记录',
+  'empty.no-records.body': '审查器在线，但此会话还没有被裁决的工具调用。记录保留在本进程内，重启即清。',
+  'detail.verdict': '裁决',
+  'detail.toolCall': '工具调用',
+  'detail.context': '审查上下文',
+  'detail.project': '项目环境',
+  'detail.result': '审查结果',
+  'detail.model': '模型',
+  'detail.capturedAt': '审查时间',
+  'detail.tool': '工具',
+  'detail.arguments': '参数',
+  'detail.description': '说明',
+  'detail.finish': '异常终结',
+  'detail.reason': '依据',
+  'detail.thinking': '思考',
+  'detail.raw': '原始内容',
+  'copy.value': '复制值',
+  'copy.json': '复制 JSON',
+  'copy.path': '复制路径',
+  'copy.prettyJson': '复制格式化 JSON',
+  'copy.compactJson': '复制紧凑 JSON',
+  'copied': '已复制',
+  'copy.failed': '复制失败',
+  'json.collapse': '折叠',
+  'json.expand': '展开',
+  'copy.optionsHint': '复制选项：{action}',
+  'detail.back': '返回列表',
+  'detail.missing': '该记录已被环形缓冲逐出。',
+  'error.fallback': '面板请求失败（{code}）。',
+} as const
+
+/** English labels; every key mirrors {@link zh}. */
+export const en: Record<keyof typeof zh, string> = {
+  'tab.title': 'Reviews',
+  'tab.description': 'Read the Auto preset reviewer\'s verdict and basis for every tool call',
+  'about.label': 'About',
+  'about.close': 'Close',
+  'about.title': 'Auto Review Panel',
+  'about.body': 'Reviewer: {package}',
+  'about.policy': 'The reviewer\'s fixed policy (REVIEW_POLICY)',
+  'about.policy.empty': 'The REVIEW_POLICY text is captured verbatim with every record; there is no record to show yet.',
+  'about.reviewer.unknown': 'not detected',
+  'filter.risk': 'Risk',
+  'filter.decision': 'Decision',
+  'filter.all': 'All',
+  'filter.risk.low': 'Low',
+  'filter.risk.medium': 'Medium',
+  'filter.risk.high': 'High',
+  'chip.allow': 'allow',
+  'chip.deny': 'deny',
+  'chip.error': 'error',
+  'chip.failed': 'failed',
+  'risk.low': 'low',
+  'risk.medium': 'medium',
+  'risk.high': 'high',
+  'mode.native': 'native',
+  'mode.ptc-inner': 'ptc-inner',
+  'group.session': 'This session',
+  'group.uncorrelated': 'Uncorrelated',
+  'reason.none': 'the verdict protocol carries no reason',
+  'list.loading': 'Loading review records…',
+  'list.refresh': 'Refresh',
+  'empty.reviewer-unavailable.title': 'Auto Review is not enabled',
+  'empty.reviewer-unavailable.body': 'The official @deepseek-ai/dsh-experimental-auto-review bundle is not enabled or not installed. Enable the bundled version in the plugin manager and try again.',
+  'empty.not-auto.title': 'This session is not on the Auto preset',
+  'empty.not-auto.body': 'The reviewer only adjudicates tool calls under the Auto permission preset; this session runs “{preset}”, so no review records exist.',
+  'empty.channel-missing.title': 'Panel channel unavailable',
+  'empty.channel-missing.body': 'The host did not register the review channel — the connection is not ready, the host predates the endpoint, or the panel service failed to start. Host-side capture is unaffected.',
+  'empty.no-records.title': 'No review records yet',
+  'empty.no-records.body': 'The reviewer is online, but no tool call has been adjudicated in this session yet. Records live in this process only and clear on restart.',
+  'detail.verdict': 'Verdict',
+  'detail.toolCall': 'Tool Call',
+  'detail.context': 'Review context',
+  'detail.project': 'Project env',
+  'detail.result': 'Review result',
+  'detail.model': 'Model',
+  'detail.capturedAt': 'Reviewed at',
+  'detail.tool': 'Tool',
+  'detail.arguments': 'Arguments',
+  'detail.description': 'Description',
+  'detail.finish': 'Abnormal finish',
+  'detail.reason': 'Basis',
+  'detail.thinking': 'Thinking',
+  'detail.raw': 'Raw',
+  'copy.value': 'Copy value',
+  'copy.json': 'Copy JSON',
+  'copy.path': 'Copy path',
+  'copy.prettyJson': 'Copy pretty JSON',
+  'copy.compactJson': 'Copy compact JSON',
+  'copied': 'Copied',
+  'copy.failed': 'Copy failed',
+  'json.collapse': 'Collapse',
+  'json.expand': 'Expand',
+  'copy.optionsHint': 'Copy options: {action}',
+  'detail.back': 'Back to list',
+  'detail.missing': 'This record was evicted from the ring buffer.',
+  'error.fallback': 'The panel request failed ({code}).',
+}
+
+/** Copy keys this panel may translate. */
+export type Key = keyof typeof zh
+
+declare module '@deepseek-ai/dsh-client-ui-slots' {
+  interface LocaleNamespaceMap {
+    /** Auto Review panel tab, list, detail, and empty-state copy. */
+    'auto-review-panel': Key
+  }
+}

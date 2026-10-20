@@ -126,6 +126,13 @@ export interface ReviewRecordSummary {
   readonly action: {
     readonly name?: string
     readonly mode?: ReviewActionMode
+    /**
+     * One-line preview of the pending action's most identifying argument —
+     * the command for exec-style calls, the path for file calls. Projected
+     * host-side from `pendingAction.arguments`, truncated; absent when the
+     * arguments carry no string member worth showing.
+     */
+    readonly preview?: string
   }
   readonly risk?: ReviewRisk
   readonly decision?: ReviewDecision
@@ -141,6 +148,12 @@ export interface PanelStatus {
   readonly reviewerAvailable: boolean
   /** The session's current preset, when the session is known and readable. */
   readonly sessionPreset?: string
+  /**
+   * The loader entry name of the mounted reviewer bundle (e.g.
+   * `@deepseek-ai/dsh-experimental-auto-review`), when the composition lets
+   * the host read it back.
+   */
+  readonly reviewerPackage?: string
 }
 
 /** `list` success value. Records are newest first. */

@@ -70,6 +70,11 @@ export interface ReviewCaptureHostOptions {
   readonly autoPreset: string
   /** The reserved `run_code` transport name the reviewer never reviews. */
   readonly runCodeName: string
+  /**
+   * Enumerate the mounted loader entry names (package specifiers). Optional:
+   * the About line shows the reviewer package only when the host can read it.
+   */
+  readonly listPluginNames?: () => readonly string[]
   readonly now?: () => string
   readonly createId?: () => string
   readonly globalCapacity?: number
@@ -144,6 +149,7 @@ export class ReviewCaptureHost {
   readonly #sessions: PanelSessions
   readonly #autoPreset: string
   readonly #runCodeName: string
+  readonly #listPluginNames: () => readonly string[]
   readonly #now: () => string
   readonly #createId: () => string
   readonly #inFlight = new Set<TrackedExecution>()
@@ -161,6 +167,7 @@ export class ReviewCaptureHost {
     this.#sessions = options.sessions
     this.#autoPreset = options.autoPreset
     this.#runCodeName = options.runCodeName
+    this.#listPluginNames = options.listPluginNames ?? (() => [])
     this.#now = options.now ?? (() => new Date().toISOString())
     this.#createId = options.createId ?? (() => `review-${++this.#recordCounter}`)
     const bufferOptions: ReviewRecordBufferOptions = {
@@ -294,9 +301,25 @@ export class ReviewCaptureHost {
   #status(sessionId: string | undefined): PanelStatus {
     const reviewerAvailable = this.#reviewerAvailable()
     const sessionPreset = sessionId === undefined ? undefined : this.#sessionPreset(sessionId)
+    const reviewerPackage = this.#reviewerPackage()
     return {
       reviewerAvailable,
       ...(sessionPreset === undefined ? {} : { sessionPreset }),
+      ...(reviewerPackage === undefined ? {} : { reviewerPackage }),
+    }
+  }
+
+  /**
+   * The mounted reviewer bundle's loader entry name: the first entry whose
+   * name names an auto-review bundle. Absent when the loader surface cannot
+   * be read or nothing matches — the client then shows no package line.
+   */
+  #reviewerPackage(): string | undefined {
+    try {
+      return this.#listPluginNames().find(name =>
+        name.includes('auto-review') && !name.includes('auto-review-panel'))
+    } catch {
+      return undefined
     }
   }
 

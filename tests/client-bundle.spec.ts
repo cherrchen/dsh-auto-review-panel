@@ -97,6 +97,8 @@ describe('the dsh.client declaration', () => {
       '@deepseek-ai/dsh-client-locale',
       '@deepseek-ai/dsh-client-ui-renderer',
       '@deepseek-ai/dsh-client-ui-sidebar',
+      '@deepseek-ai/dsh-client-ui-sidebar-right',
+      '@deepseek-ai/dsh-client-ui-session',
     ])
   })
 

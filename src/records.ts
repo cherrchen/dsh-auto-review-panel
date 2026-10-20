@@ -45,6 +45,9 @@ function deepFreeze<T>(value: T): T {
   return Object.freeze(value)
 }
 
+/** Maximum characters of an action preview kept in one list row. */
+export const SUMMARY_PREVIEW_LIMIT = 160
+
 /** Shorten one list-row reason without inventing content. */
 function summarizeReason(reason: string): string {
   return reason.length <= SUMMARY_REASON_LIMIT
@@ -52,15 +55,47 @@ function summarizeReason(reason: string): string {
     : `${reason.slice(0, SUMMARY_REASON_LIMIT - 3)}...`
 }
 
+/**
+ * Argument member names checked first for the row preview, in priority
+ * order: the identifying argument for exec-style calls is `command`, for
+ * file calls `path`. Falling back to the first string member keeps the
+ * projection honest for tools whose shape is not listed here.
+ */
+const PREVIEW_KEYS = ['command', 'file_path', 'filePath', 'path', 'file', 'filename', 'fileName', 'target', 'url', 'query', 'cwd'] as const
+
+/** Project `pendingAction.arguments` onto one list-row preview line. */
+function summarizeActionPreview(args: unknown): string | undefined {
+  if (args === null || typeof args !== 'object' || Array.isArray(args)) return undefined
+  const record = args as Record<string, unknown>
+  let text: string | undefined
+  for (const key of PREVIEW_KEYS) {
+    const value = record[key]
+    if (typeof value === 'string' && value.trim() !== '') { text = value; break }
+  }
+  if (text === undefined) {
+    for (const value of Object.values(record)) {
+      if (typeof value === 'string' && value.trim() !== '') { text = value; break }
+    }
+  }
+  if (text === undefined) return undefined
+  const line = text.trim().split('\n', 1)[0]!.trim()
+  if (line === '') return undefined
+  return line.length <= SUMMARY_PREVIEW_LIMIT
+    ? line
+    : `${line.slice(0, SUMMARY_PREVIEW_LIMIT - 3)}...`
+}
+
 /** Project one full record onto the list row. */
 export function summarizeRecord(record: ReviewRecord): ReviewRecordSummary {
   const reason = record.output.reason
+  const preview = summarizeActionPreview(record.sections.pendingAction.arguments)
   return {
     id: record.id,
     capturedAt: record.capturedAt,
     action: {
       ...(record.sections.pendingAction.name === undefined ? {} : { name: record.sections.pendingAction.name }),
       ...(record.sections.pendingAction.mode === undefined ? {} : { mode: record.sections.pendingAction.mode }),
+      ...(preview === undefined ? {} : { preview }),
     },
     ...(record.output.risk === undefined ? {} : { risk: record.output.risk }),
     ...(record.output.decision === undefined ? {} : { decision: record.output.decision }),
