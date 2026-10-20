@@ -6,7 +6,7 @@
  * @module @dsh-electron/dsh-auto-review-panel/client/model
  */
 
-import type { PanelListValue, PanelStatus, ReviewDecision, ReviewRecordSummary, ReviewRisk } from '../contract.ts'
+import type { PanelListValue, PanelStatus, ReviewDecision, ReviewRecord, ReviewRecordSummary, ReviewRisk } from '../contract.ts'
 
 /** What the polling source last observed over the channel. */
 export type PanelSnapshot =
@@ -105,4 +105,50 @@ export function groupSummaries(records: readonly ReviewRecordSummary[], filters:
 export function rowTime(iso: string): string {
   const time = new Date(iso)
   return Number.isNaN(time.getTime()) ? iso : time.toLocaleTimeString()
+}
+
+/**
+ * The waterfall outcome line for the detail overview: the downstream decision
+ * verbatim, plus the denial's error code when the downstream `deny` carried
+ * one (`AUTO_REVIEW_DENIED` for a reviewer refusal).
+ * @param record - the full record.
+ * @returns the line, or undefined when the anchor never reached the call.
+ */
+export function downstreamOf(record: ReviewRecord): string | undefined {
+  const correlation = record.correlation
+  if (correlation === undefined) return undefined
+  const info = correlation.denialInfo
+  return info === undefined
+    ? correlation.downstreamDecision
+    : `${correlation.downstreamDecision} · ${info.code}`
+}
+
+/**
+ * The host-disposition line for the detail overview, composed from Session
+ * event evidence: the logged tool/result identity and the approval outcome.
+ * Codes and outcome names are protocol vocabulary — shown verbatim, never
+ * translated.
+ * @param record - the full record.
+ * @param labels - the two localized fragments (executed / approval prompt).
+ * @returns the line, or undefined when no Session event evidence attached.
+ */
+export function hostOutcomeOf(
+  record: ReviewRecord,
+  labels: { readonly completed: string; readonly approval: string },
+): string | undefined {
+  const outcome = record.hostOutcome
+  if (outcome === undefined) return undefined
+  const parts: string[] = []
+  const result = outcome.toolResult
+  if (result !== undefined) {
+    parts.push(result.isError
+      ? (result.code ?? result.name ?? 'error')
+      : labels.completed)
+  }
+  if (outcome.approval !== undefined) {
+    parts.push(outcome.approval.outcome === undefined
+      ? labels.approval
+      : `${labels.approval} → ${outcome.approval.outcome}`)
+  }
+  return parts.length === 0 ? undefined : parts.join(' · ')
 }

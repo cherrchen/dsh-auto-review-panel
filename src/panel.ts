@@ -16,6 +16,7 @@
 
 import { Service, type Context } from '@deepseek-ai/cordis'
 import { AUTO_PRESET } from '@deepseek-ai/dsh-permission-presets'
+import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
 import { RUN_CODE_NAME, type PreToolDecision, type ToolExecution } from '@deepseek-ai/dsh-tools'
 import type {} from './compat.ts'
 import { mountPanelChannel } from './channel.ts'
@@ -63,11 +64,42 @@ export default class AutoReviewPanelService extends Service {
       },
     })
 
-    // Appended observers: the reviewer's own prepend listener must stay the
-    // first word on every call. The tee is read-only and never short-circuits.
+    // The correlation listener is prepended: cordis runs the LAST-registered
+    // prepend listener first, so in a composition whose reviewer row mounts
+    // before this row the anchor observes `deny + never` executions too —
+    // its `next()` then resolves to the reviewer's own returned decision,
+    // including the denied verdict's `AUTO_REVIEW_DENIED` info. When the
+    // reviewer mounts first the listener degrades to the append position:
+    // unreachable `deny + never` execs simply stay uncorrelated, exactly the
+    // fallback the buffer model already covers. Listener order is not a
+    // public contract; the evidence-bearing behavior is verified by
+    // composition test, never assumed.
     ctx.on('llm/stream', (options, next) => this.host.stream(options, next))
-    ctx.on('tools/pre-execute', async (exec: ToolExecution, next: () => Promise<PreToolDecision>) =>
-      this.host.preExecute(exec as ReviewExecutionLike, next))
+    ctx.on('session/event', (session: Session, event: SessionEvent) =>
+      this.host.observeSessionEvent(String(session.id), event))
+
+    // The correlation listener is prepended one macrotask after mount:
+    // cordis runs the LAST-registered prepend listener first, and mount-time
+    // registrations (the reviewer's own prepend, the jobs guards) all land
+    // before any tool execution can exist — a timer-bound registration is
+    // therefore measurably ahead of them while still preceding the first
+    // possible exec. When another fiber prepends later the listener degrades
+    // to the behind-reviewer position: unreachable `deny + never` execs
+    // simply stay uncorrelated, exactly the fallback the buffer model already
+    // covers. Listener order is not a public contract; the composition smoke
+    // asserts the observed order, it is never assumed.
+    ctx.effect(() => {
+      let off: (() => boolean) | undefined
+      const timer = setTimeout(() => {
+        off = ctx.on('tools/pre-execute',
+          async (exec: ToolExecution, next: () => Promise<PreToolDecision>) =>
+            this.host.preExecute(exec as ReviewExecutionLike, next), { prepend: true })
+      }, 0)
+      return () => {
+        clearTimeout(timer)
+        void off?.()
+      }
+    })
 
     mountPanelChannel(ctx, this.host)
   }

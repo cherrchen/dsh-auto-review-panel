@@ -80,20 +80,59 @@ export interface ReviewSections {
   readonly pendingAction: ReviewPendingAction
 }
 
+/** The error identity a downstream `deny` decision carried back through the waterfall. */
+export interface ReviewDenialInfo {
+  readonly name: string
+  readonly code: string
+}
+
 /**
  * What the `tools/pre-execute` correlation anchor observed.
  *
- * `downstreamDecision` is the decision THIS plugin's listener received from
- * the listeners after it — not the reviewer's decision. The two are separate
- * facts: the reviewer may allow while a downstream listener denies, and a
- * downstream listener may itself produce `ask`. The reviewer's own `ask`
- * (deny converted after approval) is produced before this listener runs and is
- * never visible here.
+ * `downstreamDecision` is the decision this plugin's listener received from
+ * the rest of the waterfall — not the reviewer's decision. With this plugin's
+ * listener prepended ahead of the reviewer's (the composition order the
+ * bundle's patch produces), that rest includes the reviewer itself, so
+ * `deny + never` verdicts arrive here as `deny` carrying
+ * `denialInfo: {name: 'AutoReviewDeniedError', code: 'AUTO_REVIEW_DENIED'}`,
+ * and the reviewer's converted `ask` arrives as `ask`. When the composition
+ * mounts the reviewer first, this listener only sees executions whose
+ * waterfall reached it — `deny + never` then leaves the record uncorrelated.
+ * `denialInfo` is the verbatim `info` a downstream `deny` carried, never
+ * re-derived.
  */
 export interface ReviewCorrelation {
   readonly sessionId: string
   readonly callId: string
   readonly downstreamDecision: DownstreamDecision
+  readonly denialInfo?: ReviewDenialInfo
+}
+
+/**
+ * How the host disposed of one correlated call, read verbatim from Session
+ * events. Evidence attaches only to records with `correlation.callId` — an
+ * uncorrelated record never carries this field.
+ */
+export interface ReviewHostOutcome {
+  /**
+   * The `tool/result` event logged for this call. `isError` outcomes carry
+   * the logged error identity — `AutoReviewDeniedError`/`AUTO_REVIEW_DENIED`
+   * for a reviewer denial.
+   */
+  readonly toolResult?: {
+    readonly isError: boolean
+    readonly name?: string
+    readonly code?: string
+    readonly reason?: string
+  }
+  /**
+   * The `approval/asked` + `approval/decided` audit pair logged for this
+   * call — the human approval surface an upstream `ask` routed through.
+   * `outcome` is the `approval/decided` value; absent while the ask is open.
+   */
+  readonly approval?: {
+    readonly outcome?: string
+  }
 }
 
 /** The reviewer's response, with the raw final text always retained. */
@@ -117,6 +156,7 @@ export interface ReviewRecord {
   readonly output: ReviewOutput
   readonly finish?: ReviewFinish
   readonly correlation?: ReviewCorrelation
+  readonly hostOutcome?: ReviewHostOutcome
 }
 
 /** The compact row the list endpoint returns. */

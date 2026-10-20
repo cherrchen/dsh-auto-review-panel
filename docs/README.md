@@ -24,7 +24,7 @@ English: [README.en.md](./README.en.md)
 | 文档 | 位置 |
 | --- | --- |
 | 开发需求 | [`requirements/auto-review-panel.md`](./requirements/auto-review-panel.md) |
-| 开发路径与进度总账（Plan） | [`plans/active/2026-10-20-auto-review-panel.md`](./plans/active/2026-10-20-auto-review-panel.md) |
+| 开发路径与进度总账（Plan） | [`plans/completed/2026-10-20-auto-review-panel.md`](./plans/completed/2026-10-20-auto-review-panel.md) |
 | 上游 Auto Review 调研（Reference） | [`reference/upstream-auto-review.md`](./reference/upstream-auto-review.md) |
 | 兼容性代码契约（ADR-0001） | [`decisions/ADR-0001-dsh-compat-contract.md`](./decisions/ADR-0001-dsh-compat-contract.md) |
 | 上游耦合策略（ADR-0002） | [`decisions/ADR-0002-upstream-coupling-policy.md`](./decisions/ADR-0002-upstream-coupling-policy.md) |

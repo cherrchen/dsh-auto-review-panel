@@ -36,16 +36,16 @@ Plans with long-term reference value should not be deleted.
 
 ## Current State
 
-active:
+active: none yet.
 
-- [2026-10-20-auto-review-panel.md](./active/2026-10-20-auto-review-panel.md) — the Auto Review Panel development path and **progress ledger**: repository initialization (bundle skeleton, compatibility contract, build/verification chain, documentation system) in progress; M1 (the panel surface) not started.
+completed:
 
-completed: none yet.
+- [2026-10-20-auto-review-panel.md](./completed/2026-10-20-auto-review-panel.md) — the Auto Review Panel development path and **progress ledger**: initialization, M1 review-record capture, M2 panel, and M3 polish & first release — all complete, shipping with `v0.1.0`.
 
 ### Numbering
 
 - **M1 onward** are roadmap milestones; initialization has no milestone number.
-- Single source of truth: the roadmap's [progress ledger](./active/2026-10-20-auto-review-panel.md#进度总账).
+- Single source of truth: the roadmap's [progress ledger](./completed/2026-10-20-auto-review-panel.md#进度总账).
 
 ## Naming Convention
 

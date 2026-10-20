@@ -262,3 +262,30 @@ export function runExecution(
 ): Promise<PreToolDecision> {
   return host.preExecute(exec, async () => decision)
 }
+
+/** A `tool/result` Session event for one callId. */
+export function toolResultEvent(
+  callId: string,
+  options: { readonly isError?: boolean; readonly name?: string; readonly code?: string; readonly reason?: string } = {},
+): { type: 'tool/result'; data: unknown } {
+  const isError = options.isError ?? false
+  return {
+    type: 'tool/result',
+    data: {
+      turn: 1,
+      step: 1,
+      message: { role: 'tool', toolCallId: callId, content: [], isError },
+      ...(isError ? { error: { name: options.name, code: options.code, reason: options.reason } } : {}),
+    },
+  }
+}
+
+/** An `approval/asked` Session event for one callId. */
+export function approvalAsked(id: string, callId: string): { type: 'approval/asked'; data: unknown } {
+  return { type: 'approval/asked', data: { id, toolName: 'read_file', callId } }
+}
+
+/** An `approval/decided` Session event closing one request. */
+export function approvalDecided(id: string, outcome: string): { type: 'approval/decided'; data: unknown } {
+  return { type: 'approval/decided', data: { id, outcome } }
+}

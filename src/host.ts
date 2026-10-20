@@ -24,15 +24,15 @@ import {
 } from './capture.ts'
 import { matchReviewRequest } from './compat/review-fingerprint.ts'
 import type {
-  DownstreamDecision,
   PanelListRequest,
   PanelListValue,
   PanelRpcResult,
   PanelStatus,
   ReviewActionMode,
+  ReviewHostOutcome,
   ReviewRecord,
 } from './contract.ts'
-import { ReviewRecordBuffer, type ReviewRecordBufferOptions } from './records.ts'
+import { DEFAULT_GLOBAL_CAPACITY, ReviewRecordBuffer, type ReviewRecordBufferOptions } from './records.ts'
 
 /** The `permissionPresets` surface the host actually reads. */
 export interface PanelPermissionPresets {
@@ -85,6 +85,21 @@ export interface ReviewCaptureHostOptions {
 export interface ReviewCaptureDiagnostics {
   /** Streams that started with the policy header but failed the rest. */
   readonly suspectedReviewStreams: number
+}
+
+/**
+ * One Session event as the `session/event` listener hands it over. The shape
+ * is read structurally: the approval pair lives in a plugin-merged
+ * `SessionEventMap` member this package does not import.
+ */
+export interface SessionEventLike {
+  readonly type: string
+  readonly data: unknown
+}
+
+/** The call index key for one session-scoped callId. */
+function callKey(sessionId: string, callId: string): string {
+  return `${sessionId} ${callId}`
 }
 
 /** One exec inside the AUTO-only correlation table. */
@@ -154,6 +169,22 @@ export class ReviewCaptureHost {
   readonly #createId: () => string
   readonly #inFlight = new Set<TrackedExecution>()
   /**
+   * callKey → record id, for Session-event outcome evidence. Bounded by the
+   * global ring: an index entry is only useful while its record survives.
+   */
+  readonly #recordByCall = new Map<string, string>()
+  readonly #callIndexBound: number
+  /** approval request id → callKey, while an `asked` awaits its `decided`. */
+  readonly #approvals = new Map<string, string>()
+  /**
+   * Outcome evidence awaiting its correlation anchor. The approval pair is
+   * appended inside upstream's `ask`, i.e. *before* `next()` resolves and the
+   * record correlates — accumulating here instead of requiring the anchor to
+   * exist makes evidence order-independent. Entries merge into the record at
+   * `correlate()`; keys that never correlate are dropped by the size bound.
+   */
+  readonly #pendingOutcomes = new Map<string, ReviewHostOutcome>()
+  /**
    * Records once seen in an ambiguous match. Ambiguity is permanent for that
    * record: a later exec with the same name/arguments must not claim it after
    * the competing exec happens to finish first.
@@ -175,6 +206,7 @@ export class ReviewCaptureHost {
       ...(options.sessionCapacity === undefined ? {} : { sessionCapacity: options.sessionCapacity }),
     }
     this.buffer = new ReviewRecordBuffer(bufferOptions)
+    this.#callIndexBound = options.globalCapacity ?? DEFAULT_GLOBAL_CAPACITY
   }
 
   /** Host-only diagnostics; never exposed over the panel channel. */
@@ -224,12 +256,14 @@ export class ReviewCaptureHost {
   }
 
   /**
-   * The append-side correlation anchor.
+   * The correlation anchor.
    *
    * The listener returns the downstream decision unchanged and never throws
    * for its own reasons. It tracks only executions the upstream reviewer would
    * have reviewed: an agent is present, the call is not the outer `run_code`
-   * transport, and the session's current preset is Auto.
+   * transport, and the session's current preset is Auto. Where in the
+   * waterfall it sits is the composition's choice — the host code is
+   * identical either way.
    * @param exec - the pending execution.
    * @param next - the rest of the pre-execute waterfall.
    * @returns the downstream decision, verbatim.
@@ -254,7 +288,7 @@ export class ReviewCaptureHost {
     }
 
     try {
-      if (tracked !== undefined) this.#associate(tracked, decision.kind)
+      if (tracked !== undefined) this.#associate(tracked, decision)
     } catch {
       // Correlation is best-effort; the call decision is not ours to change.
     } finally {
@@ -380,7 +414,7 @@ export class ReviewCaptureHost {
    * Attach the anchor when exactly one record and exactly one in-flight exec
    * agree. Any ambiguity leaves the record uncorrelated.
    */
-  #associate(tracked: TrackedExecution, downstreamDecision: DownstreamDecision): void {
+  #associate(tracked: TrackedExecution, decision: PreToolDecision): void {
     const pending = this.buffer.all().filter(record =>
       record.correlation === undefined
       && !this.#ambiguousRecords.has(record.id)
@@ -397,11 +431,128 @@ export class ReviewCaptureHost {
     }
     const [record] = pending
     if (record === undefined) return
-    this.buffer.correlate(record.id, {
+    const correlated = this.buffer.correlate(record.id, {
       sessionId: tracked.sessionId,
       callId: tracked.callId,
-      downstreamDecision,
+      downstreamDecision: decision.kind,
+      ...(decision.kind === 'deny' && decision.info !== undefined
+        ? { denialInfo: {
+            name: decision.info.name, code: decision.info.code,
+            ...(typeof decision.info.reason === 'string' ? { reason: decision.info.reason } : {}),
+          } }
+        : {}),
     })
+    if (correlated !== undefined) {
+      while (this.#recordByCall.size >= this.#callIndexBound) {
+        const oldest = this.#recordByCall.keys().next().value
+        if (oldest === undefined) break
+        this.#recordByCall.delete(oldest)
+      }
+      this.#recordByCall.set(callKey(tracked.sessionId, tracked.callId), correlated.id)
+      // The approval pair is appended *before* `next()` resolves — evidence
+      // collected under this callKey merges into the fresh anchor.
+      const pending = this.#pendingOutcomes.get(callKey(tracked.sessionId, tracked.callId))
+      if (pending !== undefined) {
+        this.#pendingOutcomes.delete(callKey(tracked.sessionId, tracked.callId))
+        this.buffer.attachHostOutcome(correlated.id, pending)
+      }
+    }
+  }
+
+  /**
+   * Observe one `session/event` dispatch for host-disposition evidence.
+   *
+   * Three Session events carry the outcome the reviewer decision does not:
+   * `tool/result` logs the call's durable result (a reviewer denial arrives
+   * as `AutoReviewDeniedError`/`AUTO_REVIEW_DENIED`), and the
+   * `approval/asked` + `approval/decided` pair logs the human approval an
+   * upstream `ask` routed through. Evidence reaches a record only through the
+   * correlation anchor's callId — collected early, merged at `correlate()` —
+   * and an event matching no call is ignored, never synthesized.
+   *
+   * This observer never throws: a malformed event or a lost race drops one
+   * evidence field at worst.
+   * @param sessionId - the session the event was appended to.
+   * @param event - the logged event, read structurally.
+   */
+  observeSessionEvent(sessionId: string, event: SessionEventLike): void {
+    try {
+      if (event.type === 'tool/result') this.#observeToolResult(sessionId, event.data)
+      else if (event.type === 'approval/asked') this.#observeApprovalAsked(sessionId, event.data)
+      else if (event.type === 'approval/decided') this.#observeApprovalDecided(event.data)
+    } catch {
+      // Evidence is best-effort; a malformed event drops itself.
+    }
+  }
+
+  /**
+   * Merge evidence into the record pinned to one call; when no record is
+   * pinned yet (the approval pair arrives before correlation), accumulate
+   * the evidence for `correlate()` to merge. A callKey that is never
+   * correlated keeps its evidence pending until the bound drops it — it can
+   * never land on an uncorrelated record, which is exactly the contract.
+   */
+  #patchOutcome(key: string, patch: (outcome: ReviewHostOutcome) => ReviewHostOutcome): void {
+    const id = this.#recordByCall.get(key)
+    if (id === undefined) {
+      if (this.#pendingOutcomes.size >= 200) this.#pendingOutcomes.delete(this.#pendingOutcomes.keys().next().value!)
+      this.#pendingOutcomes.set(key, patch(this.#pendingOutcomes.get(key) ?? {}))
+      return
+    }
+    const record = this.buffer.get(id)
+    if (record === undefined) {
+      this.#recordByCall.delete(key)
+      return
+    }
+    this.buffer.attachHostOutcome(id, patch(record.hostOutcome ?? {}))
+  }
+
+  /** The `tool/result` event carries the durable outcome of one call. */
+  #observeToolResult(sessionId: string, data: unknown): void {
+    if (!isRecord(data)) return
+    const message = data['message']
+    if (!isRecord(message)) return
+    const callId = message['toolCallId']
+    if (typeof callId !== 'string') return
+    const error = isRecord(data['error']) ? data['error'] : undefined
+    this.#patchOutcome(callKey(sessionId, callId), outcome => ({
+      ...outcome,
+      toolResult: {
+        isError: message['isError'] === true,
+        ...(error === undefined ? {} : {
+          ...(typeof error['name'] === 'string' ? { name: error['name'] } : {}),
+          ...(typeof error['code'] === 'string' ? { code: error['code'] } : {}),
+          ...(typeof error['reason'] === 'string' ? { reason: error['reason'] } : {}),
+        }),
+      },
+    }))
+  }
+
+  /** `approval/asked` opens the human-approval audit for one call. */
+  #observeApprovalAsked(sessionId: string, data: unknown): void {
+    if (!isRecord(data)) return
+    const id = data['id']
+    const callId = data['callId']
+    if (typeof id !== 'string' || typeof callId !== 'string') return
+    const key = callKey(sessionId, callId)
+    if (this.#approvals.size >= 200) this.#approvals.delete(this.#approvals.keys().next().value!)
+    this.#approvals.set(id, key)
+    this.#patchOutcome(key, outcome => ({ ...outcome, approval: outcome.approval ?? {} }))
+  }
+
+  /** `approval/decided` closes the audit pair opened by `asked`. */
+  #observeApprovalDecided(data: unknown): void {
+    if (!isRecord(data)) return
+    const id = data['id']
+    const outcome = data['outcome']
+    if (typeof id !== 'string' || typeof outcome !== 'string') return
+    const key = this.#approvals.get(id)
+    if (key === undefined) return
+    this.#approvals.delete(id)
+    this.#patchOutcome(key, current => ({
+      ...current,
+      approval: { ...current.approval, outcome },
+    }))
   }
 
   /** Whether one captured PENDING_ACTION is this exact execution. */

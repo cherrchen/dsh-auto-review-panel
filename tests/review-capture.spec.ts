@@ -16,6 +16,8 @@ import type { ReviewCaptureHost } from '../src/host.ts'
 import {
   abortedFinish,
   ALLOW_TEXT,
+  approvalAsked,
+  approvalDecided,
   capture,
   collect,
   DENY_TEXT,
@@ -34,6 +36,7 @@ import {
   stopFinish,
   streamOf,
   textDelta,
+  toolResultEvent,
 } from './support/review-fixtures.ts'
 
 /** The first held record, asserting it exists. */
@@ -400,5 +403,113 @@ describe('pre-execute correlation', () => {
       throw new Error('downstream failed')
     })).rejects.toThrow('downstream failed')
     expect(firstRecord(host).correlation).toBeUndefined()
+  })
+
+  it('keeps the verbatim denial info a downstream deny carried', async () => {
+    const host = makeHost()
+    await capture(host)
+    const denied: PreToolDecision = {
+      kind: 'deny',
+      reason: 'Auto review rejected tool "read_file"; its body was not executed',
+      info: { name: 'AutoReviewDeniedError', code: 'AUTO_REVIEW_DENIED' },
+    }
+    const decision = await runExecution(host, execution(), denied)
+    expect(decision).toBe(denied)
+    const record = firstRecord(host)
+    expect(record.correlation?.downstreamDecision).toBe('deny')
+    expect(record.correlation?.denialInfo).toEqual({
+      name: 'AutoReviewDeniedError',
+      code: 'AUTO_REVIEW_DENIED',
+    })
+  })
+})
+
+describe('host disposition evidence', () => {
+  it('attaches the logged denial identity to the correlated record', async () => {
+    const host = makeHost()
+    await capture(host)
+    await runExecution(host)
+    host.observeSessionEvent('session-1', toolResultEvent('call-1', {
+      isError: true,
+      name: 'AutoReviewDeniedError',
+      code: 'AUTO_REVIEW_DENIED',
+      reason: 'sends credentials to an external host',
+    }))
+    expect(firstRecord(host).hostOutcome?.toolResult).toEqual({
+      isError: true,
+      name: 'AutoReviewDeniedError',
+      code: 'AUTO_REVIEW_DENIED',
+      reason: 'sends credentials to an external host',
+    })
+  })
+
+  it('attaches a clean tool result as an executed outcome', async () => {
+    const host = makeHost()
+    await capture(host)
+    await runExecution(host)
+    host.observeSessionEvent('session-1', toolResultEvent('call-1'))
+    expect(firstRecord(host).hostOutcome?.toolResult).toEqual({ isError: false })
+  })
+
+  it('merges evidence that arrives before the anchor exists (approval inside the waterfall)', async () => {
+    const host = makeHost()
+    await capture(host)
+    await host.preExecute(execution(), async () => {
+      // The upstream `ask` logs the approval pair before `next()` resolves —
+      // the record does not carry its anchor yet at that point.
+      host.observeSessionEvent('session-1', approvalAsked('approval-1', 'call-1'))
+      host.observeSessionEvent('session-1', approvalDecided('approval-1', 'allowed-once'))
+      return { kind: 'ask' }
+    })
+    expect(firstRecord(host).correlation?.downstreamDecision).toBe('ask')
+    expect(firstRecord(host).hostOutcome?.approval).toEqual({ outcome: 'allowed-once' })
+  })
+
+  it('attaches the approval audit pair asked then decided', async () => {
+    const host = makeHost()
+    await capture(host)
+    await runExecution(host)
+    host.observeSessionEvent('session-1', approvalAsked('approval-1', 'call-1'))
+    expect(firstRecord(host).hostOutcome?.approval).toEqual({})
+    host.observeSessionEvent('session-1', approvalDecided('approval-1', 'allowed-once'))
+    expect(firstRecord(host).hostOutcome?.approval).toEqual({ outcome: 'allowed-once' })
+  })
+
+  it('refuses evidence on an uncorrelated record', async () => {
+    const host = makeHost()
+    await capture(host)
+    host.observeSessionEvent('session-1', toolResultEvent('call-1', {
+      isError: true,
+      name: 'AutoReviewDeniedError',
+      code: 'AUTO_REVIEW_DENIED',
+    }))
+    host.observeSessionEvent('session-1', approvalAsked('approval-1', 'call-1'))
+    expect(firstRecord(host).hostOutcome).toBeUndefined()
+  })
+
+  it('ignores events for a callId the anchor never pinned', async () => {
+    const host = makeHost()
+    await capture(host)
+    await runExecution(host)
+    host.observeSessionEvent('session-1', toolResultEvent('call-other', { isError: true, code: 'X' }))
+    host.observeSessionEvent('session-1', approvalDecided('approval-unknown', 'rejected'))
+    expect(firstRecord(host).hostOutcome).toBeUndefined()
+  })
+
+  it('ignores a result logged under a different session', async () => {
+    const host = makeHost()
+    await capture(host)
+    await runExecution(host)
+    host.observeSessionEvent('session-2', toolResultEvent('call-1', { isError: true, code: 'AUTO_REVIEW_DENIED' }))
+    expect(firstRecord(host).hostOutcome).toBeUndefined()
+  })
+
+  it('survives a malformed event without touching the record', async () => {
+    const host = makeHost()
+    await capture(host)
+    await runExecution(host)
+    host.observeSessionEvent('session-1', { type: 'tool/result', data: 'not-an-object' })
+    host.observeSessionEvent('session-1', { type: 'approval/asked', data: { id: 7 } })
+    expect(firstRecord(host).hostOutcome).toBeUndefined()
   })
 })

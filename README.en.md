@@ -16,7 +16,7 @@ This plugin is an out-of-tree extension that modifies no upstream code and gives
 - **Host/client halves**: the host half carries the channel that reads review state; the browser half renders it into the sidebar. The two halves talk over DSH's Connection channel — no private HTTP surface.
 - **Absent config means absent plugin**: when the host's DSH release is not on the allowlist, or core packages mix releases, the plugin's rows simply do not start and the composition degrades to "plugin not installed" — a deliberate fail-closed, see [ADR-0001](./docs/decisions/ADR-0001-dsh-compat-contract.md).
 
-Currently in the initialization stage (`v0.0.0`, unreleased): the bundle skeleton, the compatibility gate, and the build/verification chain are in place; the panel surface itself lands with the first milestone. Progress and release state live in the [roadmap progress ledger](./docs/plans/active/2026-10-20-auto-review-panel.md#进度总账).
+The first release `v0.1.0` is ready: review-record capture, host-outcome evidence, and the sidebar.right panel have all landed, verified by `smoke:live` in a real composition against the official `@deepseek-ai/dsh-experimental-auto-review@0.2.1-rc.2` (npm `next`). Progress and release state live in the [roadmap progress ledger](./docs/plans/completed/2026-10-20-auto-review-panel.md#进度总账).
 
 ## Requirements
 
@@ -110,7 +110,7 @@ Issues and PRs are welcome:
 
 ## Known limitations
 
-- The panel surface has not landed yet: today the `auto-review-panel` row provides only the `autoReviewPanel` service key and the compatibility verdict; review-record capture (a read-only `llm/stream` tee plus a correlation anchor), the `PANEL_CHANNEL` read endpoints, and the sidebar.right panel arrive on the M1/M2 schedule ([roadmap](./docs/plans/active/2026-10-20-auto-review-panel.md)).
+- Records live only in memory: nothing persists across a process restart, and records without a `correlation.callId` anchor stay honestly in the "uncorrelated" group with no host-outcome evidence.
 - The support matrix is an exact-version allowlist: when the host release is unlisted, or core packages mix releases, the gated `auto-review-panel` row **does not start** and the composition degrades to "plugin not installed" ([ADR-0001](./docs/decisions/ADR-0001-dsh-compat-contract.md)).
 - The official Auto Review exposes no dedicated data feed for a panel: verdicts and rationale must be read through existing host-side seams, and if upstream changes those seams' shape, only the adaptation layer or the upgrade lane can notice — this plugin makes no cross-version semantic guarantee ([upstream survey](./docs/reference/upstream-auto-review.md)).
 

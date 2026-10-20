@@ -13,6 +13,7 @@
 
 import type {
   ReviewCorrelation,
+  ReviewHostOutcome,
   ReviewRecord,
   ReviewRecordSummary,
 } from './contract.ts'
@@ -158,6 +159,27 @@ export class ReviewRecordBuffer {
     const updated = deepFreeze({ ...current, correlation })
     this.#records[index] = updated
     this.#enforceSession(correlation.sessionId)
+    return updated
+  }
+
+  /**
+   * Attach host-disposition evidence to one record.
+   *
+   * Evidence is only meaningful against an anchor: an uncorrelated record is
+   * returned unchanged, so a Session event can never fake an outcome onto a
+   * call the anchor never saw. Like `correlate`, the record is replaced with
+   * a new frozen object.
+   * @param id - record identity.
+   * @param hostOutcome - the merged outcome to store.
+   * @returns the new frozen record, or the current one when the update does not apply.
+   */
+  attachHostOutcome(id: string, hostOutcome: ReviewHostOutcome): ReviewRecord | undefined {
+    const index = this.#records.findIndex(record => record.id === id)
+    if (index < 0) return undefined
+    const current = this.#records[index]
+    if (current === undefined || current.correlation === undefined) return current
+    const updated = deepFreeze({ ...current, hostOutcome })
+    this.#records[index] = updated
     return updated
   }
 

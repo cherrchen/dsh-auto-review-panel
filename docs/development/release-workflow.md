@@ -18,7 +18,7 @@ verify（复用 ci.yml 全部门禁） → publish（npm publish + GitHub Releas
 
 发版由 tag 触发，所以一切准备都发生在打 tag **之前**，并且必须与 tag 在同一次推送里到位：
 
-1. **同步发布状态文档**。发布状态的唯一真源是[路线图 §进度总账](../plans/active/2026-10-20-auto-review-panel.md#进度总账)，先把那里从"未发版"改成"随 `vX.Y.Z` 发版"；README 的支持版本说明与 `docs/` 下各 README 的版本句随之对齐。发版后**不要**再回头补这些句子，否则 tag 指向的树与它自己的文档不一致。
+1. **同步发布状态文档**。发布状态的唯一真源是[路线图 §进度总账](../plans/completed/2026-10-20-auto-review-panel.md#进度总账)，先把那里从"未发版"改成"随 `vX.Y.Z` 发版"；README 的支持版本说明与 `docs/` 下各 README 的版本句随之对齐。发版后**不要**再回头补这些句子，否则 tag 指向的树与它自己的文档不一致。
 2. **写 CHANGELOG 条目**。在 [`CHANGELOG.md`](../../CHANGELOG.md)（英文对应 [`CHANGELOG.en.md`](../../CHANGELOG.en.md)）中新增 `## [X.Y.Z] - YYYY-MM-DD`，按 Added / Changed / Fixed 归类**使用者可见**的变更，不兼容变更单独成段写在最前；末尾的比较链接要指向新 tag。中英两份必须同批更新——它们是同一份逻辑文档，中文为准。
 3. **本地跑一遍与 CI 相同的完整门禁**（见文末「验证」），全绿之后才进入 bump。
 

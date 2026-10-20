@@ -90,7 +90,7 @@ The changelog is maintained as a bilingual pair too (`CHANGELOG.md` / `CHANGELOG
 
 The project is an out-of-tree DSH plugin bundle (`@dsh-electron/dsh-auto-review-panel`) that gives the Auto permission preset's reviewer — Auto Review — a visible panel surface, without modifying any upstream package.
 
-The repository is in its initialization stage (`v0.0.0`, unreleased): the bundle skeleton (compat gate, host service row, client-graph anchor), the compatibility contract, the build/test/smoke chain, and the documentation system are in place; the review surface itself is the first milestone. Progress, numbering and release state have exactly one home: the progress ledger in `docs/plans/active/2026-10-20-auto-review-panel.md`. The user-visible changes of each released version have exactly one home as well: `CHANGELOG.md` / `CHANGELOG.en.md`, which every release updates in the same change.
+The repository's first release (`v0.1.0`) is prepared: review-record capture, host-outcome evidence, and the sidebar.right panel are implemented and verified against the real composed profile (`pnpm smoke:live`, official reviewer `@deepseek-ai/dsh-experimental-auto-review@0.2.1-rc.2` from npm `next`). Progress, numbering and release state have exactly one home: the progress ledger in `docs/plans/completed/2026-10-20-auto-review-panel.md`. The user-visible changes of each released version have exactly one home as well: `CHANGELOG.md` / `CHANGELOG.en.md`, which every release updates in the same change.
 
 Seven invariants that must survive future changes:
 

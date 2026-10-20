@@ -1,6 +1,6 @@
 # 开发需求文档：DSH Auto Review Panel（out-of-tree 插件，不改上游）
 
-> 状态：v1——需求定稿（捕获方案已按上游源码逐行核实）。进度与发布状态的唯一真源见[路线图 §进度总账](../plans/active/2026-10-20-auto-review-panel.md#进度总账)。| 日期：2026-10-20
+> 状态：v1——需求定稿（捕获方案已按上游源码逐行核实）。进度与发布状态的唯一真源见[路线图 §进度总账](../plans/completed/2026-10-20-auto-review-panel.md#进度总账)。| 日期：2026-10-20
 > **硬约束：不得修改上游仓库（deepseek-harness）中任何包**——全部产物是外部插件/bundle，通过 `dsh plugin add` 或 profile patch 组合安装。
 > 事实依据：[upstream-auto-review.md](../reference/upstream-auto-review.md)（上游 Auto Review `0.2.1-rc.2` 调研）；捕获决策：[ADR-0003](../decisions/ADR-0003-review-record-capture.md)
 
@@ -38,8 +38,8 @@ Auto 权限预设下，每一次工具执行都先经 Auto Review 审查器裁�
 | 接缝 | 能拿到 | 拿不到 | 结论 |
 | --- | --- | --- | --- |
 | `llm/stream` waterfall（只读 tee） | 审查请求全文（五分区逐字）+ 全部响应 chunk（reasoning + 裁决 JSON） | 无 session/callId 身份 | **主数据通道**——唯一能拿到全保真审查内容的公开接缝；需结构指纹识别审查流 |
-| `tools/pre-execute` listener（append） | `exec` 全貌（agent/session、callId、mode、name、args）+ 自身下游结局 | reviewer 结论（上游 listener `{prepend:true}` 先跑；deny+never 时根本不 `next()`） | **关联锚**——给记录回填 sessionId/callId/结局；拿不到完整覆盖也无损数据完整性 |
-| Session 事件（客户端既有） | deny 的 `AUTO_REVIEW_DENIED` info、ask 的审批面 | allow 结局；审查上下文 | **佐证**——面板可与工具卡对照，不重复呈现 |
+| `tools/pre-execute` listener（延迟一个 macrotask 的 prepend） | `exec` 全貌（agent/session、callId、mode、name、args）+ 上游返回的决定本身（含 deny 的 `info` 逐字） | listener 顺序非公开契约——更晚 prepend 的纤维会排到它前面 | **关联锚**——给记录回填 sessionId/callId/downstreamDecision/denialInfo；顺序不利时退回"上游之后"位置，deny+never 重新如实未关联 |
+| Session 事件（`session/event` 观察） | `tool/result` 的持久结局（deny 的 `AUTO_REVIEW_DENIED` info 逐字）、`approval/asked`+`approval/decided` 审批审计对 | allow 结局之外的任何佐证；无 callId 锚的事件 | **佐证**——只回填 `hostOutcome` 到已关联记录，未关联记录永不佐证 |
 | fork 上游审查器 | 内部精确事件 | 覆盖不了官方插件；fork 全量同步成本 | **不做**——见非目标 |
 
 ## 4. 功能需求
@@ -48,10 +48,11 @@ Auto 权限预设下，每一次工具执行都先经 Auto Review 审查器裁�
 
 - **`llm/stream` 只读 tee**：listener 识别审查流后 `next()` 取真 stream，返回"边转发边记录"的包装 iterable；options 与 chunk 只读，绝不替换、短路或重发。识别用**结构指纹**而非版本字符串：`options.system` 以 `REVIEW_POLICY` 节头开头；恰一条 user 消息且其文本含 `ENVIRONMENT` / `PROJECT_INSTRUCTIONS` / `FILTERED_HISTORY` / `PENDING_ACTION` 四个节头；`temperature === 0`；`options.sessionId` 与 `options.purpose` 均缺席（上游 reviewer 不设身份字段，`purpose` 联合类型无 review 值）。指纹不匹配 → 不识别 → 不记录——普通对话流不匹配是**正常路径**，指纹失配绝不产生任何用户可见信号。
 - **tee 的防御边界**：吞掉的只有**记录路径自身**的异常——上游 stream 的 `error`/`aborted` finish chunk 与普通 chunk 一律原样透传（否则就改了 reviewer 的失败语义）；记录失败最坏丢一条记录，绝不影响裁决。
-- **`tools/pre-execute` 关联 listener（append）**：维护"AUTO preset + 有 agent"的在飞执行表；`llm/stream` 记录完成后按 PENDING_ACTION 的 `name` + `arguments` 精确匹配回填 `{sessionId, callId, mode}`。本 listener 的 `next()` 结果回填为 **`downstreamDecision`**（`PreToolDecision["kind"]`：`allow`/`deny`/`cancel`/`ask`）——它是"本插件位置之后其余 listener 的决定"，与 reviewer decision 可能不同（reviewer allow、下游仍可 deny；下游 listener 自己也可产生 `ask`），需要区分的是**上游 reviewer 的 `ask`**：它在上游自己的返回值里产生，不经过本 listener；deny+never / reviewer failed 时 `next()` 根本不被调用。上游 deny+never 时 exec 到不了本 listener——记录仍以 PENDING_ACTION 自持完整，关联字段如实缺席。
-- **记录缓冲**：每会话与全局双上限的环形缓冲（初值每会话 50 / 全局 200 条，超长丢弃最旧）；记录落缓冲即不可变；`id` 由宿主铸造。
+- **`tools/pre-execute` 关联 listener（prepend，挂载后延迟一个 macrotask）**：维护"AUTO preset + 有 agent"的在飞执行表；`llm/stream` 记录完成后按 PENDING_ACTION 的 `name` + `arguments` 精确匹配回填 `{sessionId, callId, downstreamDecision, denialInfo?}`。prepend 前置使 `next()` 包进整个上游 reviewer：上游返回的决定（deny+never 的 `denied()`、deny+ask 的 `askUser`）即 `downstreamDecision`，上游 deny 携带的 `info`（`AutoReviewDeniedError`/`AUTO_REVIEW_DENIED`/`reason`）逐字落进 `correlation.denialInfo`。**延迟注册的依据见架构文档 §3.1 实测结论**：service 构造期或 `ctx.effect` 同步注册都会被上游反超；延迟一个 macrotask 在实测组合中落在最前。若某纤维更晚 prepend（顺序非公开契约），listener 退回"上游之后"：此时 deny+never / reviewer failed 的 exec 不再到达，记录仍以 PENDING_ACTION 自持完整、关联字段如实缺席。
+- **宿主结局佐证（`session/event`）**：`tool/result`（callId 匹配）回填 `hostOutcome.toolResult {isError, name?, code?, reason?}`；`approval/asked`/`approval/decided`（经 `callId` 与 requestId 桥接）回填 `hostOutcome.approval {outcome, reason?}`。佐证只能落在已有 `correlation.callId` 的记录上——事件早于关联落位时暂存，`correlate()` 时并入；匹配不上的一律丢弃，未关联记录如实无佐证（**ask 的审批面只呈现在详情"宿主结局"行——`ask` 本身不是 reviewer decision，不进裁决 chip**）。
+- **记录缓冲**：每会话与全局双上限的环形缓冲（每会话 50 / 全局 200 条，超长丢弃最旧）；记录落缓冲即不可变；`id` 由宿主铸造。上限经长跑实测复核：单条记录驻留约 2 KiB（JSON 投影约 16 KiB），200 全局帽下全量驻留约 0.3 MiB——两个上限按证据保留不变。
 - **响应解析**：末个 text 块按上游协议解析 `{risk, decision, reason?}`（allow 协议禁带 reason）；解析失败裁决记 `error` 并保留原始尾部文本（`output.rawText` **始终**保存——"模型原文"的数据源）。`finish` chunk 为 `error`/`aborted` 时记录 `finish: {kind, code?, message?}`——reviewer 失败也必须留下记录，否则用户只在轨迹看到工具失败而面板空白。
-- **记录模型**（契约见 `src/contract.ts`）：`{id, capturedAt, provider, model, requestText, sections{policy, environment, projectInstructions, filteredHistory, pendingAction}, reasoning[], output{risk?, decision?, reason?, rawText}, finish?, correlation?{sessionId, callId, downstreamDecision}}`——`policy` 为 `options.system` 逐字、`requestText` 为 user 消息文本逐字，两者重组即审查请求全文（"逐字"验收由此可执行）；`sections` 是解析后的结构面（含四个数据节的对象形式），UI 消费它、`requestText` 留作对照与审计。
+- **记录模型**（契约见 `src/contract.ts`）：`{id, capturedAt, provider, model, requestText, sections{policy, environment, projectInstructions, filteredHistory, pendingAction}, reasoning[], output{risk?, decision?, reason?, rawText}, finish?, correlation?{sessionId, callId, downstreamDecision, denialInfo?}, hostOutcome?{toolResult?, approval?}}`——`policy` 为 `options.system` 逐字、`requestText` 为 user 消息文本逐字，两者重组即审查请求全文（"逐字"验收由此可执行）；`sections` 是解析后的结构面（含四个数据节的对象形式），UI 消费它、`requestText` 留作对照与审计。
 
 ### 4.2 面板通道
 
@@ -82,6 +83,7 @@ Auto 权限预设下，每一次工具执行都先经 Auto Review 审查器裁�
 | 审查流指纹未命中 | 不记录、无 UI 信号（普通流的正常路径）；`REVIEW_POLICY` 开头但余部不符的"疑似流"只进宿主诊断计数 |
 | reviewer finish 为 error/aborted | 记录保留：`finish: {kind, code?, message?}`，列表/详情如实显示"审查失败" |
 | PENDING_ACTION 无关联 exec | 记录保留；归入"未关联"组，不受会话过滤隐藏 |
+| 宿主佐证无 callId 锚 | 事件丢弃；未关联记录如实无 `hostOutcome` |
 | 裁决 JSON 不符协议 | `decision: error`，`rawText` 保留原文 |
 | Connection 缺席 | 不挂通道；宿主捕获仍运行 |
 
@@ -98,7 +100,7 @@ Auto 权限预设下，每一次工具执行都先经 Auto Review 审查器裁�
 宿主捕获：
 
 - AUTO preset 会话执行一次 low-risk 调用后，缓冲里恰好多一条记录：`policy` 与 `options.system` 逐字一致、`sections` 四个数据节与 `requestText` 逐节一致、`decision: allow`、reasoning 原文完整、`output.rawText` 与原始输出逐字一致。
-- `never` 下一次 high-risk 拒绝：记录含 `decision: deny` + reason；exec 未到达关联 listener 时记录仍完整、`correlation` 缺席，且该记录归入恒可见的"未关联"组。
+- `never` 下一次 high-risk 拒绝：记录含 `decision: deny` + reason；prepend 居前的组合中回填 `correlation{sessionId, callId, downstreamDecision: 'deny', denialInfo{AUTO_REVIEW_DENIED}}` 且 `hostOutcome.toolResult` 由日志二次佐证；顺序不利使 exec 未到达关联 listener 时记录仍完整、`correlation` 缺席，且该记录归入恒可见的"未关联"组。
 - reviewer finish 为 `error`/`aborted`（如断流）：记录保留 `finish` 字段，不以缺省收尾。
 - 非审查 LLM 流（普通 session 对话、compaction、session-title）不产生记录；指纹任一要素缺失不误记；fork 形状的 `reviewUserText`（ENVIRONMENT 含 multiRoot 字段、PROJECT_INSTRUCTIONS 含 `current-root-instructions` 条目）经同一指纹命中且解析无损。
 - tee 故障注入（记录路径抛错）不改变任何一次审查的结局与 stream 消费；上游 stream 的 error chunk 原样到达消费者。
@@ -115,7 +117,7 @@ Auto 权限预设下，每一次工具执行都先经 Auto Review 审查器裁�
 ## 7. 开放问题
 
 - 记录推送：v1 用客户端轮询还是通道订阅（`rpc.handle` 支持事件推送的形态需按 connection 现状定）。
-- 关联时机：当前用 append listener 的在飞表；若改用 prepend 的 pending-exec registry（上游 prepend 之前先登记 exec）可让 deny+never 也获得关联，但 listener 顺序非公开契约，需实测后再评估。
-- 全局缓冲上限在长跑会话下的内存占用实测后再调。
+- ~~关联时机~~ **已收口（M3）**：prepend 延迟注册经真实组合实测采纳——`smoke:live` 断言 `deny+never` 回填 `correlation` 与 `denialInfo{AUTO_REVIEW_DENIED}`；机制与退路见架构文档 §3.1。
+- ~~全局缓冲上限~~ **已收口（M3）**：长跑实测单条驻留约 2 KiB（16 KiB JSON），200 全局帽 ≈ 0.3 MiB，50/200 上限按证据保留。
 - 「检索」的 v1 范围定为：会话过滤 + risk/decision 多选筛选；按工具名/参数的全文检索不在 v1。
 - 「上下文维护」的 v1 范围定为：每条审查的最终快照（policy + 四节 + requestText）；跨调用的上下文演化/差分视图是另一个功能，不在本插件承诺内。

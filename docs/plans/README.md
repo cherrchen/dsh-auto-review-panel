@@ -36,16 +36,16 @@ completed/
 
 ## 当前状态
 
-active：
+active：暂无。
 
-- [2026-10-20-auto-review-panel.md](./active/2026-10-20-auto-review-panel.md) — Auto Review Panel 开发路径与**进度总账**：仓库初始化（bundle 骨架、兼容性契约、构建/验证链、文档体系）进行中，M1（面板面）未开始。
+completed：
 
-completed：暂无。
+- [2026-10-20-auto-review-panel.md](./completed/2026-10-20-auto-review-panel.md) — Auto Review Panel 开发路径与**进度总账**：初始化、M1 审查记录捕获、M2 面板、M3 打磨与首发，全部完成，随 `v0.1.0` 发版。
 
 ### 编号口径
 
 - **M1 起**为路线图里程碑；初始化不属于里程碑编号。
-- 唯一真源：[路线图的进度总账](./active/2026-10-20-auto-review-panel.md#进度总账)。
+- 唯一真源：[路线图的进度总账](./completed/2026-10-20-auto-review-panel.md#进度总账)。
 
 ## 推荐命名
 

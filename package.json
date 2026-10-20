@@ -1,7 +1,7 @@
 {
   "name": "@dsh-electron/dsh-auto-review-panel",
   "description": "Auto Review Panel for DeepSeek Harness: an out-of-tree bundle giving the Auto permission preset's reviewer a visible panel surface",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/types/index.d.ts",
@@ -53,6 +53,7 @@
     "pack:check": "node scripts/check-pack.mjs",
     "smoke": "pnpm smoke:compose",
     "smoke:compose": "node scripts/smoke-compose.mjs",
+    "smoke:live": "node scripts/smoke-live.mjs",
     "smoke:packed": "node scripts/smoke-packed.mjs",
     "test": "vitest run",
     "test:watch": "vitest",

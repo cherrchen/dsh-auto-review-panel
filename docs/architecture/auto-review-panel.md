@@ -20,8 +20,11 @@ StreamingReviewCapture      逐 chunk 累积 reasoning/text/finish，上游 erro
 ReviewRecordBuffer          add() 即 deepFreeze；每会话 50 / 全局 200 双环形帽
    ▲
    │  correlate() 换入新冻结记录（不原地改）
-tools/pre-execute listener（append）
-   AUTO preset 在飞表 + name/arguments/mode 精确匹配 → 回填 correlation{sessionId, callId, downstreamDecision}
+tools/pre-execute listener（挂载后一个 macrotask 延迟的 prepend）
+   AUTO preset 在飞表 + name/arguments/mode 精确匹配 → 回填 correlation{sessionId, callId, downstreamDecision, denialInfo?}
+   ▲
+   │  attachHostOutcome()（仅 correlation.callId 已知的记录）
+session/event observer（tool/result、approval/asked、approval/decided）→ hostOutcome
    ▼
 PANEL_CHANNEL（connection.rpc.handle）
    list(sessionId?) → {records: Summary[], status{reviewerAvailable, sessionPreset?}}
@@ -47,15 +50,36 @@ M2 客户端面板（sidebar.right tab）
 
 会话过滤规则：**`list(sessionId)` 恒含未关联记录**——`deny + never` 的 exec 到不了 append listener，这批记录没有 sessionId，却必须出现在任何会话视图里。列表行是 `summarizeRecord` 投影的紧凑行（时间、action name+mode、`preview`——`pendingAction.arguments` 里按 `command`/`path` 等键序取出的首个字符串成员一行截断、risk、decision、截断 160 字符的 reason、finish、correlated 标记），详情走 `get(id)` 取完整记录。
 
-## 3. 关联锚
+## 3. 关联锚与宿主佐证
 
-`tools/pre-execute` append listener（`src/host.ts`）维护"有 agent + 非外层 `run_code` + 会话当前 preset 为 Auto"的在飞执行表。exec 落锤（`next()` 返回）时，以 PENDING_ACTION 的 `name` + `mode` + `arguments`（`JSON.stringify` 无损比较，与上游 `sameJson` 同形）匹配未关联记录：
+### 3.1 listener 位置（M3-2 实测结论）
 
-- 恰一条候选记录且恰一个在飞同形 exec → 回填 `correlation{sessionId, callId, downstreamDecision}`；
+关联 listener 以 `{prepend: true}` 注册，但推迟到挂载后的第一个 macrotask（`ctx.effect` 内 `setTimeout`）。实测依据（`pnpm smoke:live` 断言，正式组合 `@deepseek-ai/dsh-experimental-auto-review@0.2.1-rc.2`）：
+
+- cordis 让**最后注册的** prepend listener 跑在 waterfall 最前；
+- 上游 reviewer 在自己行挂载时经 `ctx.effect` 注册 prepend——在本插件行（挂载顺序在其后）的 Service 构造器或 `ctx.effect` 里同步注册，都会**先于**上游落表，反而排到它后面；
+- 推迟一个 macrotask 的注册晚于所有挂载期注册、又早于任何可能发生的 exec（exec 需要会话，会话不可能存在于挂载同步阶段）——实测 `deny + never` 的记录因此获得 `correlation` 与 `denialInfo: {code: 'AUTO_REVIEW_DENIED'}`。
+
+listener 顺序不是公开契约：如果某个纤维比我们更晚 prepend，本 listener 退回"在上游之后"的位置，`deny + never` 重新不可见、记录如实保持未关联——缓冲模型本就覆盖这条退路。位置是断言出来的事实，不是假设。
+
+### 3.2 在飞表与匹配
+
+`src/host.ts` 维护"有 agent + 非外层 `run_code` + 会话当前 preset 为 Auto"的在飞执行表。exec 落锤（`next()` 返回）时，以 PENDING_ACTION 的 `name` + `mode` + `arguments`（`JSON.stringify` 无损比较，与上游 `sameJson` 同形）匹配未关联记录：
+
+- 恰一条候选记录且恰一个在飞同形 exec → 回填 `correlation{sessionId, callId, downstreamDecision, denialInfo?}`；
 - 任何歧义（多条记录对一个 exec、多个同形 exec 对一条记录）→ 不关联，且该记录记入永久歧义集——后落的竞争 exec 不得靠排除法认领它；
-- `next()` 抛错 → 在飞项清掉、异常原样上抛。
+- `next()` 抛错 → 在飞项清掉、异常原样上抛，记录保留且如实未关联。
 
-`downstreamDecision` 是**本 listener 之后其余 waterfall 的决定**（`PreToolDecision["kind"]`），可能与 reviewer decision 不同；上游 reviewer 自己产生的 `ask` 发生在本 listener 之前，不可见——两个事实在契约层分列（`output.decision` vs `correlation.downstreamDecision`）。
+`downstreamDecision` 是**本 listener 观察到的下一段 waterfall 决定**（`PreToolDecision["kind"]`）。prepend 居前时它就是上游返回的决定本身——`deny + never` 时上游的 `denied()` 决定与 `info`（`AutoReviewDeniedError`/`AUTO_REVIEW_DENIED`/`reason`）逐字落进 `correlation.denialInfo`；`deny + ask` 时观察到 `ask`（协议仍记 `decision: deny`，宿主处置与 reviewer 裁决在契约层分列：`output.decision` vs `correlation.downstreamDecision`）。
+
+### 3.3 宿主结局佐证（session/event）
+
+`ctx.on('session/event')` 观察追加进 Session 日志的两类事件，只回填 `hostOutcome`、只在 `correlation.callId` 已知的记录上：
+
+- `tool/result`（按 `message.id === callId` 匹配，message 先展开）→ `hostOutcome.toolResult {isError, name?, code?, reason?}`——`deny + never` 的 `AUTO_REVIEW_DENIED` 在日志侧被二次佐证；`name`/`code`/`reason` 取自事件 `error` 字段（`ToolResultError['info']`），verbatim；
+- `approval/asked` 携带 `callId` → 建立 `requestId → callKey` 旁路索引并挂出空 `approval` 面 → `approval/decided` 同 requestId → `hostOutcome.approval {outcome, reason?}`——`ask` 转人工的真实结局（allowed-once / rejected / cancelled / unavailable），如实记录。
+
+**佐证只属于已关联记录**：两类佐证都按 `callKey(sessionId, callId)` 寻址；事件早于关联落位（审批对在 `next()` 返回前就已入日志）时先进 `pendingOutcomes` 暂存，`correlate()` 时并入记录。`asked` 不携带 `callId` 或寻址不到任何锚的事件一律丢弃，绝不按工具名/会话猜给记录；`#approvals`/`#pendingOutcomes`/`#recordByCall` 各设 200 上限防泄漏。未关联记录永远拿不到 `hostOutcome`——这是"佐证需要锚"的诚实边界。
 
 ## 4. 通道与空态事实
 

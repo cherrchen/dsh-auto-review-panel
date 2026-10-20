@@ -6,10 +6,15 @@ This file records the user-visible changes of every **released** version.
 
 - Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow [Semantic Versioning](https://semver.org/).
 - Installation, supported upstream runtimes, and known limitations are in the [README](./README.md).
-- Per-release implementation evidence, numbering, and release state live in the [roadmap progress ledger](./docs/plans/active/2026-10-20-auto-review-panel.md#进度总账); GitHub Release bodies are generated from commit history by `scripts/release-notes.mjs` and are the complete raw list beyond this file.
+- Per-release implementation evidence, numbering, and release state live in the [roadmap progress ledger](./docs/plans/completed/2026-10-20-auto-review-panel.md#进度总账); GitHub Release bodies are generated from commit history by `scripts/release-notes.mjs` and are the complete raw list beyond this file.
 
 ## [Unreleased]
 
 ### Added
 
-- Repository initialization: the out-of-tree bundle skeleton (the `auto-review-panel-compat` boot gate, the `auto-review-panel` host service row, and the `auto-review-panel-client` bare-package-name client-graph anchor), the host/client split build (tsdown + tsc declarations), the DSH compatibility code contract (exact-version allowlist `0.2.1-rc.2`, mixed/incomplete/unsupported verdicts, the `warn` upgrade lane), the composition smoke and pack gate, the CI / release / upgrade / diag workflows, lefthook local commit hooks, and bilingual README / CHANGELOG plus the docs documentation system.
+- Repository initialization:
+
+- Review record capture (M1): a read-only `llm/stream` tee identifies the official Auto Review's review streams by structural fingerprint; records keep the full review request verbatim (`requestText`/`sections`), the original reasoning, the verdict output (`risk`/`decision`/`reason`/`rawText`), and `finish` anomalies; a `tools/pre-execute` in-flight table pins `correlation{sessionId, callId, downstreamDecision, denialInfo?}` by exact PENDING_ACTION match — ambiguity is left uncorrelated rather than guessed; a dual ring buffer (50 per session / 200 globally, re-confirmed by measurement).
+- Host outcome evidence (M3): a `session/event` observer reads `tool/result` plus the `approval/asked`/`approval/decided` audit pair and attaches `hostOutcome{toolResult?, approval?}` to correlated records — `AUTO_REVIEW_DENIED` is evidenced at both the decision and the durable-log layer for `deny+never`, and the human-approval outcome of `deny+ask` is shown verbatim; records without a callId anchor are never evidenced.
+- Panel UI (M2/M3): a new "Auto Review" tab in `sidebar.right` — a list (tool name + mode · risk/verdict tags · argument preview · rationale + time, grouped by current session / uncorrelated, with risk/decision filters) plus a detail view (overview card + four tabs — pending action, review context, project environment, review result — rendered through `JsonTree`); the four empty states are distinguished honestly (reviewer not enabled / non-Auto session / channel absent / no records yet); bilingual zh/en copy.
+- Acceptance: `pnpm smoke:live` runs the full §6 matrix (49 assertions) in a real composed web/headless profile with the official `@deepseek-ai/dsh-experimental-auto-review@0.2.1-rc.2` from npm `next`.

@@ -363,6 +363,49 @@ describe('the detail view', () => {
     await waitFor(() => expect(panel.textContent).toContain('first thought'))
   })
 
+  it('shows the waterfall verdict and host outcome lines only when observed', async () => {
+    const harness = mount({
+      get: () => Promise.resolve(record({
+        correlation: {
+          sessionId: 'session-1',
+          callId: 'call-1',
+          downstreamDecision: 'deny',
+          denialInfo: { name: 'AutoReviewDeniedError', code: 'AUTO_REVIEW_DENIED' },
+        },
+        hostOutcome: {
+          toolResult: { isError: true, name: 'AutoReviewDeniedError', code: 'AUTO_REVIEW_DENIED' },
+        },
+      })),
+    })
+    const { container } = await openDetail(harness)
+    const overview = container.querySelector('.arp-overview')!
+    expect(overview.textContent).toContain(zh['detail.downstream'])
+    expect(overview.textContent).toContain('deny · AUTO_REVIEW_DENIED')
+    expect(overview.textContent).toContain(zh['detail.hostOutcome'])
+    expect(overview.textContent).toContain('AUTO_REVIEW_DENIED')
+  })
+
+  it('renders the approval surface the upstream ask routed through', async () => {
+    const harness = mount({
+      get: () => Promise.resolve(record({
+        hostOutcome: { approval: { outcome: 'allowed-once' } },
+      })),
+    })
+    const { container } = await openDetail(harness)
+    const overview = container.querySelector('.arp-overview')!
+    expect(overview.textContent).toContain(`${zh['host.approval']} → allowed-once`)
+  })
+
+  it('omits both evidence lines when no anchor or event exists', async () => {
+    const harness = mount({
+      get: () => Promise.resolve(record({ correlation: undefined })),
+    })
+    const { container } = await openDetail(harness)
+    const overview = container.querySelector('.arp-overview')!
+    expect(overview.textContent).not.toContain(zh['detail.downstream'])
+    expect(overview.textContent).not.toContain(zh['detail.hostOutcome'])
+  })
+
   it('never renders REVIEW_POLICY inside the detail', async () => {
     const harness = mount()
     const { container } = await openDetail(harness)

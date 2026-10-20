@@ -24,7 +24,7 @@ The project currently focuses on the DSH Auto Review Panel plugin under one hard
 | Document | Location |
 | --- | --- |
 | Requirements | [`requirements/auto-review-panel.md`](./requirements/auto-review-panel.md) |
-| Development path and progress ledger (plan) | [`plans/active/2026-10-20-auto-review-panel.md`](./plans/active/2026-10-20-auto-review-panel.md) |
+| Development path and progress ledger (plan) | [`plans/completed/2026-10-20-auto-review-panel.md`](./plans/completed/2026-10-20-auto-review-panel.md) |
 | Upstream Auto Review survey (reference) | [`reference/upstream-auto-review.md`](./reference/upstream-auto-review.md) |
 | Compatibility code contract (ADR-0001) | [`decisions/ADR-0001-dsh-compat-contract.md`](./decisions/ADR-0001-dsh-compat-contract.md) |
 | Upstream coupling policy (ADR-0002) | [`decisions/ADR-0002-upstream-coupling-policy.md`](./decisions/ADR-0002-upstream-coupling-policy.md) |

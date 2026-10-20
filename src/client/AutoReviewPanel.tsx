@@ -37,8 +37,10 @@ import {
 import type { ReviewDecision, ReviewRecord, ReviewRecordSummary, ReviewRisk } from '../contract.ts'
 import {
   chipOf,
+  downstreamOf,
   emptyStateOf,
   groupSummaries,
+  hostOutcomeOf,
   reasonOf,
   rowTime,
   type EmptyState,
@@ -260,7 +262,10 @@ function RecordDetail({ record, onBack, t }: {
         ...fact('description', t('detail.description'), args.description),
         ...fact('finish', t('detail.finish'),
           record.finish === undefined ? undefined
-            : `${record.finish.kind}${record.finish.code === undefined ? '' : ` ${record.finish.code}`}${record.finish.message === undefined ? '' : ` — ${record.finish.message}`}`))),
+            : `${record.finish.kind}${record.finish.code === undefined ? '' : ` ${record.finish.code}`}${record.finish.message === undefined ? '' : ` — ${record.finish.message}`}`),
+        ...fact('downstream', t('detail.downstream'), downstreamOf(record)),
+        ...fact('host', t('detail.hostOutcome'),
+          hostOutcomeOf(record, { completed: t('host.completed'), approval: t('host.approval') })))),
     e('div', { className: 'arp-tabs', role: 'tablist' },
       ([['call', 'detail.toolCall'], ['context', 'detail.context'], ['project', 'detail.project'], ['result', 'detail.result']] as const)
         .map(([value, key]) =>
