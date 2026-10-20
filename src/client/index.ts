@@ -40,9 +40,12 @@ const STYLE_ELEMENT_ID = 'auto-review-panel-styles'
 /**
  * The client-side services the surface consumes. `slots`/`locale`/`connection`
  * were already declared; M2 adds the two-stage tab mount
- * (`sidebarRightTabs`). `connection` stays in `inject` for the type face and
- * is also read optionally through `ctx.get` — a composition without it (or
- * with it absent at eval time) shows the channel-missing empty state.
+ * (`sidebarRightTabs`). `connection` is a required inject: a composition
+ * without it never applies this plugin — the tab is absent, the same
+ * "plugin not installed" degradation the host gate uses. The `ctx.get` read
+ * stays defensive for a service swapped out after apply; the channel-missing
+ * empty state is reached through call failure (a host that mounted no
+ * channel), not through a missing client-side Connection.
  */
 export const inject = [
   'slots', 'locale', 'connection', 'sidebarRightTabs',

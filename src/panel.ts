@@ -64,16 +64,10 @@ export default class AutoReviewPanelService extends Service {
       },
     })
 
-    // The correlation listener is prepended: cordis runs the LAST-registered
-    // prepend listener first, so in a composition whose reviewer row mounts
-    // before this row the anchor observes `deny + never` executions too —
-    // its `next()` then resolves to the reviewer's own returned decision,
-    // including the denied verdict's `AUTO_REVIEW_DENIED` info. When the
-    // reviewer mounts first the listener degrades to the append position:
-    // unreachable `deny + never` execs simply stay uncorrelated, exactly the
-    // fallback the buffer model already covers. Listener order is not a
-    // public contract; the evidence-bearing behavior is verified by
-    // composition test, never assumed.
+    // Both observation listeners use the default append position: the
+    // `llm/stream` tee only records while forwarding every chunk and error
+    // unchanged, and `session/event` evidence lands only on records the
+    // correlation anchor already pinned.
     ctx.on('llm/stream', (options, next) => this.host.stream(options, next))
     ctx.on('session/event', (session: Session, event: SessionEvent) =>
       this.host.observeSessionEvent(String(session.id), event))
