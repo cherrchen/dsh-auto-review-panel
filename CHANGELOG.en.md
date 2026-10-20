@@ -12,7 +12,7 @@ This file records the user-visible changes of every **released** version.
 
 ### Added
 
-- Repository initialization:
+- Repository initialization: the out-of-tree bundle skeleton (the `auto-review-panel-compat` boot gate, the `auto-review-panel` host service row, and the `auto-review-panel-client` bare-package-name client-graph anchor), split host/client builds (tsdown + tsc declarations), the DSH compatibility contract (the `0.2.1-rc.2` exact-version allowlist, the supported/unsupported/mixed/incomplete verdicts, the `warn` upgrade lane), the composition smoke and pack gate, the CI / release / upgrade / diag workflows, the lefthook local commit hooks, and the bilingual README / CHANGELOG plus the docs tree.
 
 - Review record capture (M1): a read-only `llm/stream` tee identifies the official Auto Review's review streams by structural fingerprint; records keep the full review request verbatim (`requestText`/`sections`), the original reasoning, the verdict output (`risk`/`decision`/`reason`/`rawText`), and `finish` anomalies; a `tools/pre-execute` in-flight table pins `correlation{sessionId, callId, downstreamDecision, denialInfo?}` by exact PENDING_ACTION match — ambiguity is left uncorrelated rather than guessed; a dual ring buffer (50 per session / 200 globally, re-confirmed by measurement).
 - Host outcome evidence (M3): a `session/event` observer reads `tool/result` plus the `approval/asked`/`approval/decided` audit pair and attaches `hostOutcome{toolResult?, approval?}` to correlated records — `AUTO_REVIEW_DENIED` is evidenced at both the decision and the durable-log layer for `deny+never`, and the human-approval outcome of `deny+ask` is shown verbatim; records without a callId anchor are never evidenced.

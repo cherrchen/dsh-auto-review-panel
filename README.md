@@ -16,7 +16,7 @@ DSH（DeepSeek Harness）的 Auto 权限预设由 Auto Review 审查器在后台
 - **host/client 分半**：宿主半部承载审查状态的读取通道，浏览器半部把它渲染进侧栏；两半之间走 DSH 的 Connection 通道，不私开 HTTP 面。
 - **不配等于没装**：宿主 DSH 版本不在支持清单上、或核心包混装时，插件行不启动，组合退化为"没装这个插件"——这是刻意的 fail-closed，见 [ADR-0001](./docs/decisions/ADR-0001-dsh-compat-contract.md)。
 
-当前处于初始化阶段（`v0.0.0`，未发布）：bundle 骨架、兼容性门禁与构建/验证链已就位，面板面本身随首个里程碑落地。进度与发布状态见[路线图 §进度总账](./docs/plans/completed/2026-10-20-auto-review-panel.md#进度总账)。
+首个版本 `v0.1.0` 已就绪：审查记录捕获、宿主结局佐证与 `sidebar.right` 面板均已落地，并在真实组合上经 `pnpm smoke:live` 对照官方 `@deepseek-ai/dsh-experimental-auto-review@0.2.1-rc.2`（npm `next`）验收。进度与发布状态见[路线图 §进度总账](./docs/plans/completed/2026-10-20-auto-review-panel.md#进度总账)。
 
 ## 环境要求
 
@@ -90,11 +90,17 @@ dsh --profile web --dump-config | grep -A3 'auto-review-panel'
 ├── src/
 │   ├── compat.ts                    auto-review-panel-compat 启动门禁（版本 allowlist 与混装判定）
 │   ├── compat/dsh-version.ts        兼容性契约本体：SUPPORTED_DSH_RELEASES、核心包清单、分类与判定
-│   ├── panel.ts                     面板的宿主半部：autoReviewPanel 服务行（审查通道的宿主端随面板面落地）
-│   ├── client/                      浏览器半部：侧栏槽位贡献随面板面落地
+│   ├── compat/review-fingerprint.ts 官方 Auto Review 请求的结构指纹
+│   ├── capture.ts                   llm/stream 只读 tee 与裁决协议解析
+│   ├── host.ts                      捕获核心：在飞关联、宿主结局佐证、通道端点体
+│   ├── channel.ts                   PANEL_CHANNEL 挂载（connection.rpc.handle，软接缝）
+│   ├── records.ts                   双环形记录缓冲与列表投影
+│   ├── contract.ts                  host/client 共享 wire 契约
+│   ├── panel.ts                     面板的宿主半部：autoReviewPanel 服务行
+│   ├── client/                      浏览器半部：面板组件、轮询数据源、文案与样式
 │   └── index.ts                     公共面 barrel；其空 apply 同时承载裸包名的 client 图锚点行
-├── tests/                           兼容性判定、patch 不变量、client 制品形态
-├── scripts/                         冒烟（compose / packed）、兼容性契约检查、打包门禁、升级流程、lefthook 安装器
+├── tests/                           宿主捕获/缓冲/通道、兼容性判定、patch 不变量、client 面板与制品形态
+├── scripts/                         冒烟（compose / packed / live）、兼容性契约检查、打包门禁、升级流程、lefthook 安装器
 └── docs/                            需求、架构、决策记录（ADR）、计划、开发工作流、故障排查
 ```
 

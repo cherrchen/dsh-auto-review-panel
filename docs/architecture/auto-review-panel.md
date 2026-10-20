@@ -76,10 +76,10 @@ listener 顺序不是公开契约：如果某个纤维比我们更晚 prepend，
 
 `ctx.on('session/event')` 观察追加进 Session 日志的两类事件，只回填 `hostOutcome`、只在 `correlation.callId` 已知的记录上：
 
-- `tool/result`（按 `message.id === callId` 匹配，message 先展开）→ `hostOutcome.toolResult {isError, name?, code?, reason?}`——`deny + never` 的 `AUTO_REVIEW_DENIED` 在日志侧被二次佐证；`name`/`code`/`reason` 取自事件 `error` 字段（`ToolResultError['info']`），verbatim；
+- `tool/result`（按 `message.toolCallId === callId` 匹配，message 先展开）→ `hostOutcome.toolResult {isError, name?, code?, reason?}`——`deny + never` 的 `AUTO_REVIEW_DENIED` 在日志侧被二次佐证；`name`/`code`/`reason` 取自事件 `error` 字段（`ToolResultError['info']`），verbatim；
 - `approval/asked` 携带 `callId` → 建立 `requestId → callKey` 旁路索引并挂出空 `approval` 面 → `approval/decided` 同 requestId → `hostOutcome.approval {outcome, reason?}`——`ask` 转人工的真实结局（allowed-once / rejected / cancelled / unavailable），如实记录。
 
-**佐证只属于已关联记录**：两类佐证都按 `callKey(sessionId, callId)` 寻址；事件早于关联落位（审批对在 `next()` 返回前就已入日志）时先进 `pendingOutcomes` 暂存，`correlate()` 时并入记录。`asked` 不携带 `callId` 或寻址不到任何锚的事件一律丢弃，绝不按工具名/会话猜给记录；`#approvals`/`#pendingOutcomes`/`#recordByCall` 各设 200 上限防泄漏。未关联记录永远拿不到 `hostOutcome`——这是"佐证需要锚"的诚实边界。
+**佐证只属于已关联记录**：两类佐证都按 `callKey(sessionId, callId)` 寻址；事件早于关联落位（审批对在 `next()` 返回前就已入日志）时先进 `pendingOutcomes` 暂存，`correlate()` 时并入记录。`asked` 不携带 `callId` 或寻址不到任何锚的事件一律丢弃，绝不按工具名/会话猜给记录；`#approvals`/`#pendingOutcomes`/`#recordByCall` 的上限随全局环容量（默认 200）防泄漏；歧义标记集随记录逐出同步剪枝。未关联记录永远拿不到 `hostOutcome`——这是"佐证需要锚"的诚实边界。
 
 ## 4. 通道与空态事实
 
@@ -122,7 +122,7 @@ listener 顺序不是公开契约：如果某个纤维比我们更晚 prepend，
 **呈现纪律**：控件全部来自 `@deepseek-ai/dsh-client-ui-primitives`（Button/Tag/Menu/DisclosureRow/JsonTree/Modal/TextShimmer + 图标，seeded 模块表词、bundle 外部引用），自有 CSS 只负责布局与行排版；列表行至多三行、行间无分割线：第一行左侧 = 工具名 + mode 徽标，右侧 = risk 标签 + 裁决 chip 两个着色 Tag；第二行 = `preview` 参数预览独占一行；第三行 = 依据行，最右端时间。分"当前会话/未关联"两组（host 的会话过滤已恒含未关联，分组是纯呈现）；risk/decision 是两个多选下拉（字段名只作触发器文案、不进选项；选中几项显示几项，宿主未给的字段不算命中），无全文检索；刷新与 About 是 header 右侧两个图标按钮。详情是"概览 + tab"布局：顶部概览卡（max-height ~30%、可滚）放着色 Tag、`provider/model`、审查时间、工具名与 arguments 的标识参数/说明行；下方同会话视图的下划线 tab 条（role=tab 排 + 激活下划线，该条在上游为会话私有不导出）四个面板——`工具调用`（pendingAction）、`审查上下文`（FILTERED_HISTORY 按原始 `kind`/`role`/`source.kind` 逐条不重分类）、`项目环境`（PROJECT_INSTRUCTIONS+ENVIRONMENT 同一面板）、`审查结果`（`思考` 折叠块收 reasoning 原文、`output.rawText` 紧跟其后无标题）；每个面板先走上游 `JsonTree`（轨迹检查器同款组件，copy 菜单关闭）；仅活动面板进 DOM；REVIEW_POLICY 仅在 header About 弹出层出现（从最新一条记录的 `sections.policy` 读取，无记录时如实说明而非编造）。
 
 
-**注入**：`inject = [slots, locale, connection, sidebarRightTabs]`；`connection` 另按可选服务 `ctx.get` 读法（缺席组合只是没有数据，不是错误）。`dsh.client.inject` 同步 `@deepseek-ai/dsh-client-ui-sidebar-right`。轨迹导航曾在本里程碑评估并撤销：可见 tab 切换走 `conversation.session` 私有 inject 面的 store actions（公开服务面无写口），call 级 focus 同理，无可靠接缝时宁可不提供按钮。
+**注入**：`inject = [slots, locale, connection, sidebarRightTabs]`；`connection` 是必需 inject——缺席组合里本插件的 client 行不启动、tab 不存在（与宿主门禁同型的"未安装"退化）；`ctx.get` 是防御性读法，覆盖 apply 之后服务被替换的形状漂移，通道缺席空态经调用失败到达而非经 Connection 缺席。`dsh.client.inject` 同步 `@deepseek-ai/dsh-client-ui-sidebar-right`。轨迹导航曾在本里程碑评估并撤销：可见 tab 切换走 `conversation.session` 私有 inject 面的 store actions（公开服务面无写口），call 级 focus 同理，无可靠接缝时宁可不提供按钮。
 
 **文案**：双语 zh/en 走 `ctx.locale`（NS `auto-review-panel`），宿主侧零文案——记录、错误码、节名是共享词表。
 

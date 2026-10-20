@@ -90,11 +90,17 @@ All three plugin rows are mounted: `auto-review-panel-compat` is the boot gate, 
 ├── src/
 │   ├── compat.ts                    the auto-review-panel-compat boot gate (version allowlist and mixed-install verdicts)
 │   ├── compat/dsh-version.ts        the compatibility contract itself: SUPPORTED_DSH_RELEASES, core-package lists, classification
-│   ├── panel.ts                     the panel's host half: the autoReviewPanel service row (the review channel lands with the surface)
-│   ├── client/                      browser half: the sidebar slot contribution lands with the surface
+│   ├── compat/review-fingerprint.ts the structural fingerprint of the official Auto Review request
+│   ├── capture.ts                   the read-only llm/stream tee and the verdict protocol parser
+│   ├── host.ts                      the capture core: in-flight correlation, host-outcome evidence, endpoint bodies
+│   ├── channel.ts                   the PANEL_CHANNEL mount (connection.rpc.handle, a soft seam)
+│   ├── records.ts                   the two-ring record buffer and the list projection
+│   ├── contract.ts                  the shared host/client wire contract
+│   ├── panel.ts                     the panel's host half: the autoReviewPanel service row
+│   ├── client/                      browser half: the panel component, polling source, copy and styles
 │   └── index.ts                     public-surface barrel; its no-op apply also backs the bare-name client-graph anchor row
-├── tests/                           compatibility verdicts, patch invariants, client-artifact shape
-├── scripts/                         smokes (compose / packed), compat-contract check, pack gate, upgrade flow, lefthook installer
+├── tests/                           host capture/buffer/channel, compat verdicts, patch invariants, client panel and artifact shape
+├── scripts/                         smokes (compose / packed / live), compat-contract check, pack gate, upgrade flow, lefthook installer
 └── docs/                            requirements, architecture, ADRs, plans, development workflow, troubleshooting
 ```
 
