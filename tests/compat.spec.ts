@@ -119,10 +119,15 @@ describe('host-service package inspection', () => {
     }
   })
 
-  it('counts a runtime-loaded optional package even when its copy is inside the plugin tree', () => {
-    // The plugin dynamically imports this peer itself, so the copy it can see
-    // is the copy that would execute — absence and presence both testify.
-    expect(readInstalledVersion('@deepseek-ai/dsh-llm')).toBeTypeOf('string')
+  it('keeps the runtime-optional bucket empty while no optional peer is imported at run time', () => {
+    expect(RUNTIME_OPTIONAL_PACKAGES).toEqual([])
+  })
+
+  it('does not let a private dsh-llm copy testify — the plugin never imports it at run time', () => {
+    // `dsh-llm` arrives only as the mounted `llm` service and ambient types;
+    // the copy inside this checkout is the devDependency, not the
+    // composition's, so it must be read as absent.
+    expect(readInstalledVersion('@deepseek-ai/dsh-llm')).toBeUndefined()
   })
 })
 

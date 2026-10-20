@@ -16,8 +16,8 @@ This repository turned "which upstream releases this plugin supports" into a cod
 
 - Version differences live only in `src/compat/`; business code makes no version checks.
 - Probe **structure**, never version strings: which export exists, whether the return is thenable, which method name is present.
-- Optional packages come in two classes: `RUNTIME_OPTIONAL_PACKAGES` (packages this plugin actually `import()`s at run time — a copy inside the plugin's own root still testifies) and `HOST_SERVICE_PACKAGES` (consumed only as host-mounted services/types — only a copy outside the plugin's root testifies). Letting a host-service package testify wrongly makes a `link:` install read this repo's own devDependencies as the host's release and verdict a coherent host as `mixed`.
-- Optional peers are consumed through dynamic `import()` only, never a static value import; "package absent" and "package present but failed to evaluate" are different diagnoses and must not be collapsed.
+- Optional packages come in two classes: `RUNTIME_OPTIONAL_PACKAGES` (packages this plugin actually `import()`s at run time — a copy inside the plugin's own root still testifies) and `HOST_SERVICE_PACKAGES` (consumed only as host-mounted services/types — only a copy outside the plugin's root testifies). Letting a host-service package testify wrongly makes a `link:` install read this repo's own devDependencies as the host's release and verdict a coherent host as `mixed`. `RUNTIME_OPTIONAL_PACKAGES` is currently empty — `dsh-llm` is consumed only as the mounted `llm` service and ambient types, so it lives in `HOST_SERVICE_PACKAGES`; a peer moves into the first bucket only when the plugin genuinely `import()`s it at run time.
+- Optional peers are consumed through dynamic `import()` or as types only, never a static value import; "package absent" and "package present but failed to evaluate" are different diagnoses and must not be collapsed.
 
 ## The upgrade lane
 

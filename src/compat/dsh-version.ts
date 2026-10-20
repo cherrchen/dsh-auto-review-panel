@@ -69,26 +69,34 @@ export const OPTIONAL_CORE_PACKAGES = [
  * IS the copy that would execute, so every resolvable hit testifies — a
  * private copy inside this package's own tree genuinely loads, and a version
  * that disagrees with the host is a real mixed installation, not a phantom.
+ *
+ * The bucket is currently empty on purpose: every optional peer, `dsh-llm`
+ * included, is consumed only as a mounted host service or ambient types, so
+ * all of them live in {@link HOST_SERVICE_PACKAGES}. The list stays because
+ * the day a peer is genuinely imported at run time it must move here — a
+ * private copy of such a package DOES execute and must testify.
  */
 export const RUNTIME_OPTIONAL_PACKAGES = [
-  '@deepseek-ai/dsh-llm',
 ] as const
 
 /**
  * The optional packages this plugin consumes only as mounted host services or
  * ambient types — it never imports them, so a copy inside this package's own
- * tree can never execute. The only version that testifies is the one the
- * COMPOSITION resolves (the installation or the profile): a resolution that
- * lands inside this package's own root is a private development or bundled
- * copy and must be reported absent — otherwise a `link:`-installed checkout
- * whose devDependencies carry a newer release phantom-mixes every supported
- * host it is developed against.
+ * tree can never execute. `dsh-llm` is in this bucket: the plugin only
+ * subscribes to the `llm/stream` waterfall and uses `StreamChunk`/
+ * `GenerateOptions` as types, which import erases at compile time. The only
+ * version that testifies is the one the COMPOSITION resolves (the installation
+ * or the profile): a resolution that lands inside this package's own root is
+ * a private development or bundled copy and must be reported absent —
+ * otherwise a `link:`-installed checkout whose devDependencies carry a newer
+ * release phantom-mixes every supported host it is developed against.
  */
 export const HOST_SERVICE_PACKAGES = [
   '@deepseek-ai/dsh-agent',
   '@deepseek-ai/dsh-agent-instructions',
   '@deepseek-ai/dsh-client-connection',
   '@deepseek-ai/dsh-commands',
+  '@deepseek-ai/dsh-llm',
   '@deepseek-ai/dsh-util-values',
 ] as const
 

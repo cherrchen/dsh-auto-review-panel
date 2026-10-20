@@ -16,8 +16,8 @@ English: [dsh-compat-contract.en.md](./dsh-compat-contract.en.md)
 
 - 版本差异只放 `src/compat/`；业务代码不做版本判断。
 - 探测**结构**不比版本字符串：哪个导出存在、返回值是否 thenable、方法名是什么。
-- 可选包分两类：`RUNTIME_OPTIONAL_PACKAGES`（本插件运行时真正 `import()` 的，插件根内副本也作证）与 `HOST_SERVICE_PACKAGES`（只作宿主服务/类型消费的，只有落在插件根外的副本才作证）。把宿主服务包误判成作证源，会让 `link:` 安装把宿主版本判成 `mixed`（本仓库自己的 devDependencies 被误读成宿主的版本）。
-- 可选 peer 只能动态 `import()`，不能静态值导入；"包没装"与"包装了但求值失败"是两个诊断，不可合一。
+- 可选包分两类：`RUNTIME_OPTIONAL_PACKAGES`（本插件运行时真正 `import()` 的，插件根内副本也作证）与 `HOST_SERVICE_PACKAGES`（只作宿主服务/类型消费的，只有落在插件根外的副本才作证）。把宿主服务包误判成作证源，会让 `link:` 安装把宿主版本判成 `mixed`（本仓库自己的 devDependencies 被误读成宿主的版本）。当前 `RUNTIME_OPTIONAL_PACKAGES` 为空——`dsh-llm` 只以 `llm` 挂载服务和 ambient 类型被消费，归在 `HOST_SERVICE_PACKAGES`；哪天真的运行时 `import()` 某个可选 peer，才把它挪进前一桶。
+- 可选 peer 只能动态 `import()` 或纯类型导入，不能静态值导入；"包没装"与"包装了但求值失败"是两个诊断，不可合一。
 
 ## 升级车道
 
