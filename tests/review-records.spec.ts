@@ -41,6 +41,20 @@ function record(id: string, sessionId?: string): ReviewRecord {
 }
 
 describe('ring capacities', () => {
+  it('normalizes degenerate capacities instead of spinning or losing the cap', () => {
+    const empty = new ReviewRecordBuffer({ globalCapacity: 0 })
+    empty.add(record('z'))
+    expect(empty.size).toBe(0)
+
+    // Negative, NaN and infinite values cannot count — they fall back to the
+    // default rather than looping forever or silently disabling eviction.
+    for (const capacity of [-1, Number.NaN, Number.POSITIVE_INFINITY]) {
+      const buffer = new ReviewRecordBuffer({ globalCapacity: capacity })
+      buffer.add(record('x'))
+      expect(buffer.size).toBe(1)
+    }
+  })
+
   it('defaults to 50 per session and 200 globally', () => {
     const buffer = new ReviewRecordBuffer()
     for (let index = 0; index < DEFAULT_GLOBAL_CAPACITY + 5; index += 1) {

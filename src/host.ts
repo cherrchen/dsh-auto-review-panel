@@ -32,7 +32,7 @@ import type {
   ReviewHostOutcome,
   ReviewRecord,
 } from './contract.ts'
-import { DEFAULT_GLOBAL_CAPACITY, ReviewRecordBuffer, type ReviewRecordBufferOptions } from './records.ts'
+import { ReviewRecordBuffer, type ReviewRecordBufferOptions } from './records.ts'
 
 /** The `permissionPresets` surface the host actually reads. */
 export interface PanelPermissionPresets {
@@ -97,9 +97,12 @@ export interface SessionEventLike {
   readonly data: unknown
 }
 
-/** The call index key for one session-scoped callId. */
+/**
+ * The call index key for one session-scoped callId. The NUL separator cannot
+ * appear in a JSON-sourced identifier, so no id content can forge a boundary.
+ */
 function callKey(sessionId: string, callId: string): string {
-  return `${sessionId} ${callId}`
+  return `${sessionId}\0${callId}`
 }
 
 /** One exec inside the AUTO-only correlation table. */
@@ -187,7 +190,9 @@ export class ReviewCaptureHost {
   /**
    * Records once seen in an ambiguous match. Ambiguity is permanent for that
    * record: a later exec with the same name/arguments must not claim it after
-   * the competing exec happens to finish first.
+   * the competing exec happens to finish first. Markers are pruned once their
+   * records leave the buffer — only a live record needs the protection, and
+   * an unpruned set would grow for the life of the process.
    */
   readonly #ambiguousRecords = new Set<string>()
   #suspectedReviewStreams = 0
@@ -206,7 +211,7 @@ export class ReviewCaptureHost {
       ...(options.sessionCapacity === undefined ? {} : { sessionCapacity: options.sessionCapacity }),
     }
     this.buffer = new ReviewRecordBuffer(bufferOptions)
-    this.#callIndexBound = options.globalCapacity ?? DEFAULT_GLOBAL_CAPACITY
+    this.#callIndexBound = this.buffer.globalCapacity
   }
 
   /** Host-only diagnostics; never exposed over the panel channel. */
@@ -248,6 +253,7 @@ export class ReviewCaptureHost {
         sections: match.sections,
       }, id, capturedAt, record => {
         this.buffer.add(record)
+        this.#pruneAmbiguity()
       })
     } catch {
       return next()
@@ -486,6 +492,21 @@ export class ReviewCaptureHost {
   }
 
   /**
+   * Drop ambiguity markers whose records no longer live in the buffer. A
+   * marker only has to outlive its record, and the global ring is the only
+   * path that can evict an uncorrelated record — so pruning on every add
+   * keeps the set bounded by the records it protects.
+   */
+  #pruneAmbiguity(): void {
+    if (this.#ambiguousRecords.size === 0) return
+    const live = new Set<string>()
+    for (const record of this.buffer.all()) live.add(record.id)
+    for (const id of this.#ambiguousRecords) {
+      if (!live.has(id)) this.#ambiguousRecords.delete(id)
+    }
+  }
+
+  /**
    * Merge evidence into the record pinned to one call; when no record is
    * pinned yet (the approval pair arrives before correlation), accumulate
    * the evidence for `correlate()` to merge. A callKey that is never
@@ -495,7 +516,7 @@ export class ReviewCaptureHost {
   #patchOutcome(key: string, patch: (outcome: ReviewHostOutcome) => ReviewHostOutcome): void {
     const id = this.#recordByCall.get(key)
     if (id === undefined) {
-      if (this.#pendingOutcomes.size >= 200) this.#pendingOutcomes.delete(this.#pendingOutcomes.keys().next().value!)
+      if (this.#pendingOutcomes.size >= this.#callIndexBound) this.#pendingOutcomes.delete(this.#pendingOutcomes.keys().next().value!)
       this.#pendingOutcomes.set(key, patch(this.#pendingOutcomes.get(key) ?? {}))
       return
     }
@@ -535,7 +556,7 @@ export class ReviewCaptureHost {
     const callId = data['callId']
     if (typeof id !== 'string' || typeof callId !== 'string') return
     const key = callKey(sessionId, callId)
-    if (this.#approvals.size >= 200) this.#approvals.delete(this.#approvals.keys().next().value!)
+    if (this.#approvals.size >= this.#callIndexBound) this.#approvals.delete(this.#approvals.keys().next().value!)
     this.#approvals.set(id, key)
     this.#patchOutcome(key, outcome => ({ ...outcome, approval: outcome.approval ?? {} }))
   }

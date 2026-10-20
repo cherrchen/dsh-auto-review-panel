@@ -34,6 +34,17 @@ export interface ReviewRecordBufferOptions {
 }
 
 /**
+ * Normalize one configured capacity. Absent, non-finite or negative values
+ * fall back to the default — a negative cap would otherwise spin the
+ * eviction loop forever and `NaN` would silently disable it. Zero is honored
+ * literally: the ring retains nothing.
+ */
+function ringCapacity(value: number | undefined, fallback: number): number {
+  if (value === undefined || !Number.isFinite(value) || value < 0) return fallback
+  return Math.floor(value)
+}
+
+/**
  * Recursively freeze one plain JSON value.
  * @param value - the value to freeze in place.
  * @returns the same value, frozen through every nested object and array.
@@ -119,8 +130,13 @@ export class ReviewRecordBuffer {
   readonly #records: ReviewRecord[] = []
 
   constructor(options: ReviewRecordBufferOptions = {}) {
-    this.#globalCapacity = options.globalCapacity ?? DEFAULT_GLOBAL_CAPACITY
-    this.#sessionCapacity = options.sessionCapacity ?? DEFAULT_SESSION_CAPACITY
+    this.#globalCapacity = ringCapacity(options.globalCapacity, DEFAULT_GLOBAL_CAPACITY)
+    this.#sessionCapacity = ringCapacity(options.sessionCapacity, DEFAULT_SESSION_CAPACITY)
+  }
+
+  /** The normalized global ring capacity. */
+  get globalCapacity(): number {
+    return this.#globalCapacity
   }
 
   /** Number of records currently held across every session. */
