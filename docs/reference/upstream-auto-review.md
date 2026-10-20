@@ -41,7 +41,7 @@
 
 专用 Auto Review 面板数据接口目前不存在；这不同于"上游完全没有可扩展接缝"。
 
-- `tools/pre-execute` 是公开 waterfall，可以增加只读观察 listener——但它看不到 reviewer 的结论（listener 只能否决/放行/通过），且 listener 顺序不属于公开契约；用它只能如实呈现"某调用进入了审查通道"，不能呈现"reviewer 怎么想"。
+- `tools/pre-execute` 是公开 waterfall，可以增加只读观察 listener——但它看不到 reviewer 的结论（listener 自己的决定只有 `allow`/`deny`/`cancel`/`ask` 四种——`ask` 转人工审批），且 listener 顺序不属于公开契约；用它只能如实呈现"某调用进入了审查通道"，不能呈现"reviewer 怎么想"。
 - [LLM runtime](https://github.com/deepseek-ai/deepseek-harness/blob/687f282e8625c6b8d11ff58211a90524be2e4317/packages/llm/llm/src/index.ts) 有公开 `llm/stream` waterfall，允许观察/包装/短路 stream。可是 review 请求没有专用 purpose/session/action 标记，且 Auto 自己 deep-freeze 请求；`next()` 也没有替换 options 的参数。用它识别"哪条 stream 是 reviewer 的"依赖 listener 顺序、私有提示词形状、重入与 retry/replay 语义，**不能当作稳定的专用接口**——本插件只读观察、绝不短路或替换。
 - 伪装成 `agent-instructions` 会占用上游 baseline/changes 协调来源；伪装 human 或 direct-parent 会错误提高权威，均不应采用。
 - 在下游追加第二次独立 review 无法补齐上游第一次 review 的上下文，还会产生双重审查和费用——不是本插件的合法手段。

@@ -20,6 +20,7 @@ Architecture Decision Records (ADRs), capturing important architecture and engin
 
 - [ADR-0001-dsh-compat-contract.md](./ADR-0001-dsh-compat-contract.md) — DSH compatibility as a code contract: an exact-version allowlist, the `auto-review-panel-compat` startup gate, mixed installations failing loudly, the `src/compat/` adapter layer, and an upgrade lane that never widens the matrix by itself (Accepted).
 - [ADR-0002-upstream-coupling-policy.md](./ADR-0002-upstream-coupling-policy.md) — Upstream coupling policy: entry-point imports only, exact version pins, upgrade smoke tests (Accepted).
+- [ADR-0003-review-record-capture.md](./ADR-0003-review-record-capture.md) — Review records captured by a read-only `llm/stream` tee with `tools/pre-execute` as the correlation anchor only: structural fingerprinting of review streams, full-fidelity observation, fail-closed degradation (Accepted).
 
 Do not create empty ADR files in advance; add one only when a real decision is made.
 

@@ -20,7 +20,7 @@
 
 The first requirements document is defined:
 
-- [auto-review-panel.md](./auto-review-panel.md) — the DSH Auto Review Panel requirements (status: draft).
+- [auto-review-panel.md](./auto-review-panel.md) — the DSH Auto Review Panel requirements (v1 settled).
 
 ## Naming Convention
 

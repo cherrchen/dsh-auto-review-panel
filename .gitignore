@@ -157,3 +157,6 @@ vite.config.ts.timestamp-*
 
 # ZCode session-local workspace state
 .zcode/
+
+# CommandCode session-local workspace state
+.commandcode/

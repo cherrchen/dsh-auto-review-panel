@@ -20,7 +20,7 @@ English: [README.en.md](./README.en.md)
 
 已定义第一份需求文档：
 
-- [auto-review-panel.md](./auto-review-panel.md) — DSH Auto Review Panel 开发需求（状态：草稿）。
+- [auto-review-panel.md](./auto-review-panel.md) — DSH Auto Review Panel 开发需求（v1 已定稿）。
 
 ## 推荐命名
 

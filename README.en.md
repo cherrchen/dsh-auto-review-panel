@@ -12,7 +12,7 @@ Under DSH (DeepSeek Harness)'s Auto permission preset, the Auto Review reviewer 
 
 This plugin is an out-of-tree extension that modifies no upstream code and gives Auto Review **a visible panel**: it surfaces the reviewer's verdicts, risk levels, and rationale in the sidebar, so "why was this call approved or denied" is no longer a black box you can only guess at from session messages.
 
-- **Read-only presentation, no verdict changes**: the panel is a UI/transport surface over the review state, not a second reviewer. Authorization policy, risk grading, and source classification belong entirely to the official Auto Review (see the [upstream survey](./docs/reference/upstream-auto-review.md)); this plugin does no prompt matching and intercepts no calls.
+- **Read-only presentation, no verdict changes**: the panel is a UI/transport surface over the review state, not a second reviewer. Authorization policy, risk grading, and source classification belong entirely to the official Auto Review (see the [upstream survey](./docs/reference/upstream-auto-review.md)); this plugin never decides, intercepts, or recomputes a call — review content is captured through a read-only `llm/stream` observation seam — a fingerprint miss simply records nothing and never fabricates ([ADR-0003](./docs/decisions/ADR-0003-review-record-capture.md)).
 - **Host/client halves**: the host half carries the channel that reads review state; the browser half renders it into the sidebar. The two halves talk over DSH's Connection channel — no private HTTP surface.
 - **Absent config means absent plugin**: when the host's DSH release is not on the allowlist, or core packages mix releases, the plugin's rows simply do not start and the composition degrades to "plugin not installed" — a deliberate fail-closed, see [ADR-0001](./docs/decisions/ADR-0001-dsh-compat-contract.md).
 
@@ -47,6 +47,8 @@ dsh plugin --profile web add /path/to/repo
 
 > [!TIP]
 > When `dsh` is not on PATH (e.g. running DSH from a source checkout), replace `dsh` in the commands with `pnpm dsh`.
+
+**Prerequisite**: this plugin only visualizes decisions an existing reviewer already made — it reviews nothing itself. For the panel to show anything, enable the official `@deepseek-ai/dsh-experimental-auto-review` first (it ships with the installation, off by default); if your installation does not carry it, install the exact `0.2.1-rc.2` explicitly — not the stale `latest`, and run the session under the Auto preset — missing either leaves the panel permanently empty.
 
 ## Development commands
 
@@ -108,7 +110,7 @@ Issues and PRs are welcome:
 
 ## Known limitations
 
-- The panel surface has not landed yet: today the `auto-review-panel` row provides only the `autoReviewPanel` service key and the compatibility verdict; the review-state channel, the slot contribution, and the rendering all arrive with the first milestone.
+- The panel surface has not landed yet: today the `auto-review-panel` row provides only the `autoReviewPanel` service key and the compatibility verdict; review-record capture (a read-only `llm/stream` tee plus a correlation anchor), the `PANEL_CHANNEL` read endpoints, and the sidebar.right panel arrive on the M1/M2 schedule ([roadmap](./docs/plans/active/2026-10-20-auto-review-panel.md)).
 - The support matrix is an exact-version allowlist: when the host release is unlisted, or core packages mix releases, the gated `auto-review-panel` row **does not start** and the composition degrades to "plugin not installed" ([ADR-0001](./docs/decisions/ADR-0001-dsh-compat-contract.md)).
 - The official Auto Review exposes no dedicated data feed for a panel: verdicts and rationale must be read through existing host-side seams, and if upstream changes those seams' shape, only the adaptation layer or the upgrade lane can notice — this plugin makes no cross-version semantic guarantee ([upstream survey](./docs/reference/upstream-auto-review.md)).
 

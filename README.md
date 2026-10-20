@@ -12,7 +12,7 @@ DSH（DeepSeek Harness）的 Auto 权限预设由 Auto Review 审查器在后台
 
 本插件是一个不修改上游任何代码的外部扩展，给 Auto Review 装上**一块看得见的面板**：把审查器的判定、风险等级与依据呈现在侧栏里，让"这次调用为什么被放行/拒绝"不再是一个只能从会话消息里猜的黑盒。
 
-- **只读呈现，不改裁决**：面板是审查状态的一个 UI/传输面，不是第二个审查器。授权策略、风险分级与来源分类完全由官方 Auto Review 负责（语义见[上游调研](./docs/reference/upstream-auto-review.md)），本插件不引入提示词匹配，也不拦截任何调用。
+- **只读呈现，不改裁决**：面板是审查状态的一个 UI/传输面，不是第二个审查器。授权策略、风险分级与来源分类完全由官方 Auto Review 负责（语义见[上游调研](./docs/reference/upstream-auto-review.md)），本插件不裁决、不拦截、不重算任何调用——审查内容经 `llm/stream` 的只读观察接缝捕获——指纹匹配不上即不记录，绝不误报（[ADR-0003](./docs/decisions/ADR-0003-review-record-capture.md)）。
 - **host/client 分半**：宿主半部承载审查状态的读取通道，浏览器半部把它渲染进侧栏；两半之间走 DSH 的 Connection 通道，不私开 HTTP 面。
 - **不配等于没装**：宿主 DSH 版本不在支持清单上、或核心包混装时，插件行不启动，组合退化为"没装这个插件"——这是刻意的 fail-closed，见 [ADR-0001](./docs/decisions/ADR-0001-dsh-compat-contract.md)。
 
@@ -47,6 +47,8 @@ dsh plugin --profile web add /path/to/repo
 
 > [!TIP]
 > `dsh` 不在 PATH 里时（例如用源码仓库跑 DSH），把命令里的 `dsh` 换成 `pnpm dsh`。
+
+**前置条件**：本插件只观察已有审查器的裁决，自身不审查。要看到内容，需先在插件管理器启用官方 `@deepseek-ai/dsh-experimental-auto-review`（它随安装附带、默认关闭）；若当前安装未附带，再显式安装精确版 `0.2.1-rc.2`，勿用滞后的 `latest`，并让会话选择 Auto preset——两者缺一，面板将恒为空。
 
 ## 运行方法
 
@@ -108,7 +110,7 @@ dsh --profile web --dump-config | grep -A3 'auto-review-panel'
 
 ## 已知限制
 
-- 面板面尚未落地：当前 `auto-review-panel` 行只提供 `autoReviewPanel` 服务键与兼容性裁决，审查状态的读取通道、槽位贡献与渲染都随首个里程碑到达。
+- 面板面尚未落地：当前 `auto-review-panel` 行只提供 `autoReviewPanel` 服务键与兼容性裁决；审查记录捕获（`llm/stream` 只读 tee + 关联锚）、`PANEL_CHANNEL` 读端点与 sidebar.right 面板按 M1/M2 排期到达（[路线图](./docs/plans/active/2026-10-20-auto-review-panel.md)）。
 - 支持矩阵是精确版本 allowlist：宿主版本不在清单上、或核心包混装了不同版本时，被门禁的 `auto-review-panel` 行**不启动**，组合退化为"没装这个插件"（[ADR-0001](./docs/decisions/ADR-0001-dsh-compat-contract.md)）。
 - 官方 Auto Review 不提供专用的面板数据源接口：审查判定与原因需要从宿主侧的既有接缝读取，上游一旦改变这些接缝的形状，只能由适配层或升级车道发现——本插件不承诺跨版本的语义直通（[上游调研](./docs/reference/upstream-auto-review.md)）。
 

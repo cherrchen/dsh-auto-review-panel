@@ -28,6 +28,7 @@ The project currently focuses on the DSH Auto Review Panel plugin under one hard
 | Upstream Auto Review survey (reference) | [`reference/upstream-auto-review.md`](./reference/upstream-auto-review.md) |
 | Compatibility code contract (ADR-0001) | [`decisions/ADR-0001-dsh-compat-contract.md`](./decisions/ADR-0001-dsh-compat-contract.md) |
 | Upstream coupling policy (ADR-0002) | [`decisions/ADR-0002-upstream-coupling-policy.md`](./decisions/ADR-0002-upstream-coupling-policy.md) |
+| Review-record capture seam (ADR-0003) | [`decisions/ADR-0003-review-record-capture.md`](./decisions/ADR-0003-review-record-capture.md) |
 
 ## Core Principles
 
