@@ -25,7 +25,7 @@ English: [README.en.md](./README.en.md)
 
 ## 当前状态
 
-尚无架构文档。面板面（审查状态的读取通道与槽位贡献）落地前的设计决定记录将首先出现在这里；此前的取舍见 `../decisions/` 中的 ADR。
+- [`auto-review-panel.md`](./auto-review-panel.md) — 宿主侧数据流与通道设计：捕获 tee → 双环缓冲 → 关联锚 → `PANEL_CHANNEL`，以及客户端空态所需事实的产生位置（M1 落地的当前架构）。
 
 ## 推荐命名
 

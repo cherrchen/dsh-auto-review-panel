@@ -25,7 +25,7 @@ Documents describing future designs must clearly state their status.
 
 ## Current State
 
-No architecture document yet. The design record of the panel surface (the review-state channel and the slot contribution) will land here first; the trade-offs made so far live in `../decisions/` as ADRs.
+- [`auto-review-panel.md`](./auto-review-panel.md) — Host-side data flow and channel design: capture tee → dual-cap buffer → correlation anchor → `PANEL_CHANNEL`, plus where the facts the client needs for its empty states are produced (current architecture, landed with M1).
 
 ## Naming Convention
 

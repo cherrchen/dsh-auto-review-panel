@@ -8,7 +8,7 @@
 | 阶段 | 内容 | 状态 | 发布 |
 | --- | --- | --- | --- |
 | 初始化 | bundle 骨架（compat/panel/client-anchor 三行）、兼容性契约、host/client 构建、tests、组合冒烟、打包门禁、lefthook、CI/release/upgrade/diag 工作流、docs 体系、双语 README/CHANGELOG | 完成（2026-10-20） | 未发版（`v0.0.0`） |
-| M1 | 审查记录捕获（宿主半部）：`llm/stream` 只读 tee + 结构指纹 + `pre-execute` 关联锚（`downstreamDecision`）+ 环形缓冲 + `PANEL_CHANNEL` list/get 端点 | 未开始 | — |
+| M1 | 审查记录捕获（宿主半部）：`llm/stream` 只读 tee + 结构指纹 + `pre-execute` 关联锚（`downstreamDecision`）+ 环形缓冲 + `PANEL_CHANNEL` list/get 端点 | 完成（2026-10-20） | — |
 | M2 | sidebar.right 面板（客户端半部）：tab 类型注册 + `sidebar.right.pane.tab` 面板体、列表/详情、四种空态、双语 | 未开始 | — |
 | M3 | 打磨与首发：关联/结局佐证增强、缓冲实测调参、真实组合验收、演示 GIF、首版发版 | 未开始 | `v0.1.0` |
 
@@ -30,7 +30,7 @@
 
 **一处对参考仓库约定的偏离**：`postinstall` 自动装钩子在 npm 包里是错的——`dsh plugin add` 安装的 tarball 会把 `postinstall` 当构建脚本拦下（`ERR_PNPM_IGNORED_BUILDS`），`smoke:packed` 已实测复现。改为 `pnpm hooks:install` 手动安装，消费者零副作用。
 
-## M1：审查记录捕获（宿主半部，未开始）
+## M1：审查记录捕获（宿主半部，完成 2026-10-20）
 
 > 目标：把死在 `classifyRisk` 里的审查数据变成宿主侧的结构化记录流。需求细节、失败语义与验收标准见[需求文档 §4/§6](../../requirements/auto-review-panel.md)，接缝决策见 [ADR-0003](../../decisions/ADR-0003-review-record-capture.md)。
 
@@ -42,6 +42,8 @@
 - `requestText` 为 user 消息逐字、`sections.policy` 为 `options.system` 逐字——两者重组即审查请求全文，验收"逐字等于审查请求"由此可执行。
 - 交付物随 M1 收拢 `docs/architecture/auto-review-panel.md`：缓冲/通道/空态判定的 host↔client 数据流（现分散于需求 §4 与本计划，ADR-0003 只覆盖捕获接缝）。
 - 验证：指纹正/负例（含普通对话、compaction、session-title 不误记）、**fork 形状 reviewUserText 的解析 fixture**、tee 故障注入不影响裁决且上游 error 透传、reviewer failed/aborted 落 `finish`、关联正确/歧义拒绝、通道形状、headless 降级。
+
+**验证证据（2026-10-20）**：`pnpm verify:all` 全绿——lint / typecheck / build / vitest 98 通过（`review-capture.spec.ts` 指纹正负例 + fork fixture + tee 双侧故障注入 + error/aborted 落 `finish` + 关联与歧义拒绝；`review-records.spec.ts` 双环帽与会话过滤恒含未关联；`review-channel.spec.ts` list/get 形状、status 两态、bad-request/unknown-endpoint、headless 不挂通道不炸）/ `smoke:compose` 17 项 / `pack:check` 25 成员 / `smoke:packed`；`compat:check` 与 `docs:check` 独立通过。架构文档 [`docs/architecture/auto-review-panel.md`](../../architecture/auto-review-panel.md) 同批收拢数据流/通道/空态判定。
 
 ## M2：sidebar.right 面板（客户端半部，未开始）
 

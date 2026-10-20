@@ -74,6 +74,7 @@ pnpm docs:check         # 文档结构检查
 | 面板入口在 Web GUI 里看不到 | 组合里没有声明 `sidebar.footer.action` 的侧栏，或 client 锚点行缺失 | 见[故障排查：client bundle 不进启动图](../troubleshooting/client-bundle-not-in-boot-graph.md) |
 | 插件装上但行为完全等同未安装，日志里有 `is not a supported release` / `mixes several DSH releases` | 宿主的 DSH 版本不在 allowlist 上，或多个 `@deepseek-ai/dsh-*` 混装 | 见[故障排查：DSH 版本不在支持矩阵上](../troubleshooting/unsupported-dsh-release.md)；`mixed` 永远按宿主问题处理，不要用 `DSH_AUTO_REVIEW_PANEL_COMPAT=warn` 绕过 |
 | `pnpm compat:check` 失败 | allowlist / `peerDependencies` / 开发 pin / 已安装树四者不一致 | 按报错逐条对齐；改 allowlist 必须同时改 `peerDependencies`（ADR-0001） |
+| `dsh plugin add <仓库目录>` 时 pnpm 警告 `The linked in dependency will not resolve the peer dependencies` | 目录源走 `link:` 协议，pnpm 提示它不会把 peer 物化进目标 `node_modules` | **无需处置，这是契约本身**：`@deepseek-ai/dsh-*` 必须由宿主组合提供唯一副本（不变量 6）；物化第二份反而是 bug。`smoke:compose` 的 17 项断言（行恰好插入、`--dump-config` 逐字节对照）已证明宿主树解析正常 |
 | `pnpm <script>` 报 `EPERM ... /Library/pnpm/.tools` | 仓库 pin 的 pnpm 版本需要写用户级 pnpm 目录 | 在可写该目录的终端（或提权）执行；仅跑门禁时可用 `sh node_modules/.bin/<tool>` 绕过 pnpm |
 | `pnpm <script>` 报 `ERR_PNPM_UNEXPECTED_STORE` 或 `ABORTED_REMOVE_MODULES_DIR_NO_TTY` | checkout 里存在陈旧的 `.pnpm-store/`（被 gitignore），而 `node_modules` 链接自磁盘级 store | 最快解除：`CI=true pnpm <script>`。根治：删掉陈旧的仓库内 `.pnpm-store/`；或 `pnpm config set store-dir <node_modules 实际链接的 store>`；或直接 `node scripts/<smoke>.mjs`（CI 不受影响，它本来就有 `CI=true`） |
 | `ERR_PNPM_IGNORED_BUILDS` | 有构建脚本的依赖未在 `pnpm-workspace.yaml` 声明 | 把该依赖加入 `allowBuilds`（需要构建）或 `allowBuilds: false`（明确不需要）；当前 `lefthook` 为 `true`、`esbuild` 为 `false` |
