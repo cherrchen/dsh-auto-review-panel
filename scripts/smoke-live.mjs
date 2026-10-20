@@ -171,7 +171,7 @@ try {
       const args = { file_path: `probe-${mark}`, mark, ...extraArgs }
       const agent = { id: target.id, session: target, ctx, options: {} }
       target.append('turn/start', { turn })
-      session.append('request/header', {
+      target.append('request/header', {
         header: { config: { provider: 'live-smoke', model: 'scripted' }, tools: ctx.tools.schemas() },
         reason: turn === 1 ? 'initial' : 'change',
       })
@@ -397,7 +397,7 @@ try {
 /** Resolve the npm `next` dist-tag of the official reviewer package. */
 async function captureDshPkg() {
   const { spawn } = await import('node:child_process')
-  const child = spawn('npm', ['view', `${OFFICIAL}@next`, 'version'], { stdio: ['ignore', 'pipe', 'pipe'] })
+  const child = spawn(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['view', `${OFFICIAL}@next`, 'version'], { stdio: ['ignore', 'pipe', 'pipe'] })
   let stdout = ''
   child.stdout.setEncoding('utf8')
   child.stdout.on('data', chunk => { stdout += chunk })

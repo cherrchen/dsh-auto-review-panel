@@ -25,9 +25,9 @@ export const REPO_ROOT = resolve(fileURLToPath(new URL('../..', import.meta.url)
 /**
  * Absolute path of the `dsh` CLI entry to drive.
  *
- * Order: `DSH_CLI` override, then the `dsh` binary on PATH, then the pinned
- * devDependency copy. The devDependency copy is last but normally used — it is
- * the only one guaranteed to be the same version the lockfile pins.
+ * Order: `DSH_CLI` override, then the pinned devDependency copy. The
+ * devDependency copy is normally used — it is the only one guaranteed to be
+ * the same version the lockfile pins.
  * @returns the CLI entry path.
  */
 export function resolveDshCliPath() {
