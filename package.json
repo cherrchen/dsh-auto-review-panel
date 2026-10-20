@@ -1,0 +1,156 @@
+{
+  "name": "@dsh-electron/dsh-auto-review-panel",
+  "description": "Auto Review Panel for DeepSeek Harness: an out-of-tree bundle giving the Auto permission preset's reviewer a visible panel surface",
+  "version": "0.0.0",
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./compat": {
+      "types": "./lib/types/compat.d.ts",
+      "default": "./lib/compat.js"
+    },
+    "./panel": {
+      "types": "./lib/types/panel.d.ts",
+      "default": "./lib/panel.js"
+    },
+    "./client": {
+      "types": "./lib/types/client/index.d.ts",
+      "default": "./lib/client.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/*.js",
+    "lib/*.js.map",
+    "lib/types/**/*.d.ts",
+    "cordis.patch.yml",
+    "README.md",
+    "README.en.md",
+    "CHANGELOG.md",
+    "CHANGELOG.en.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cherrchen/dsh-auto-review-panel.git"
+  },
+  "scripts": {
+    "build": "pnpm run build:types && pnpm run bundle",
+    "build:types": "tsc -p tsconfig.host.json && tsc -p tsconfig.client.json",
+    "bundle": "node scripts/clean-lib.mjs && tsdown",
+    "compat:check": "node scripts/check-dsh-compat.mjs",
+    "docs:check": "node scripts/check-docs.mjs",
+    "lint": "oxlint",
+    "release": "node scripts/bump-version.mjs",
+    "pack:check": "node scripts/check-pack.mjs",
+    "smoke": "pnpm smoke:compose",
+    "smoke:compose": "node scripts/smoke-compose.mjs",
+    "smoke:packed": "node scripts/smoke-packed.mjs",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc -p tsconfig.host.json --noEmit && tsc -p tsconfig.client.json --noEmit",
+    "verify:all": "pnpm lint && pnpm typecheck && pnpm build && pnpm test && pnpm smoke && pnpm pack:check && pnpm smoke:packed",
+    "prepare": "pnpm run bundle",
+    "hooks:install": "node scripts/install-lefthook.mjs"
+  },
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
+  "packageManager": "pnpm@11.25.0",
+  "license": "MIT",
+  "peerDependencies": {
+    "@deepseek-ai/cordis": ">=4.0.1 <5.0.0 || 4.0.5-alpha.1 || 4.0.5-alpha.2",
+    "@deepseek-ai/dsh-agent": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-agent-instructions": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-client-connection": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-commands": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-llm": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-permission-presets": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-session": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-tools": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-util-values": "0.2.1-rc.2"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/dsh-agent": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-agent-instructions": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-client-connection": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-commands": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-llm": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-session": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-tools": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-util-values": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "4.0.5",
+    "@deepseek-ai/dsh": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-agent": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-agent-instructions": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-app-boot": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-base": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-client-connection": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-client-locale": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-client-store": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-client-ui-renderer": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-client-ui-sidebar": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-client-ui-slots": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-commands": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-llm": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-permission-presets": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-session": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-storage": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-storage-domain": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-storage-json": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-tools": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-util-values": "0.2.1-rc.2",
+    "@types/node": "^22.0.0",
+    "@types/react": "~18.3.31",
+    "@types/react-dom": "~18.3.7",
+    "jsdom": "^29.1.1",
+    "lefthook": "^2.1.12",
+    "oxlint": "^1.76.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tsdown": "^0.22.0",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.8",
+    "yaml": "^2.9.0"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-connection",
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-renderer",
+        "@deepseek-ai/dsh-client-ui-sidebar"
+      ]
+    }
+  }
+}

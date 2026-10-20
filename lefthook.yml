@@ -1,0 +1,21 @@
+# Git hooks (lefthook). Keep these local checkpoints fast; CI owns the full
+# repository-wide gate matrix.
+# Install: `pnpm hooks:install` (opt-in; consumer installs must never run it).
+
+pre-commit:
+  jobs:
+    - name: lint (staged)
+      glob: '*.{ts,tsx,mts,cts,mjs}'
+      run: node_modules/.bin/oxlint --config .oxlintrc.json --fix --fix-suggestions --deny-warnings --no-error-on-unmatched-pattern {staged_files}
+      stage_fixed: true
+
+    - name: whitespace (staged)
+      run: git diff --cached --check
+
+pre-push:
+  jobs:
+    - name: compat contract
+      run: pnpm run compat:check
+
+    - name: docs check
+      run: pnpm run docs:check

@@ -1,0 +1,4 @@
+# Text is checked out LF on every platform: the upgrade lane rewrites
+# pnpm-workspace.yaml line-wise, and a CRLF working tree silently changes
+# that input.
+* text=auto eol=lf

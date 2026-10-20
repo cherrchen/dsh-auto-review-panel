@@ -122,8 +122,14 @@ dist
 # TernJS port file
 .tern-port
 
-# Stores Visual Studio Code versions used for testing Visual Studio Code extensions
+# Stores VSCode versions used for testing VSCode extensions
 .vscode-test
+
+# macOS Finder metadata.
+# A slash-free pattern already matches at every depth; the explicit `**/` form
+# is kept so ignore consumers that anchor patterns to the root are equally strict.
+.DS_Store
+**/.DS_Store
 
 # pnpm
 .pnpm-store
@@ -142,8 +148,12 @@ vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
 
-# Astro generated types
-.astro/
+# Plugin build output (produced by `pnpm build`, shipped via package.json `files`).
+# Root-anchored: `scripts/lib/` is source and must stay tracked.
+/lib/
 
-# Turbo Repo
-.turbo
+# Local smoke scratch directories (overridable via DSH_SMOKE_HOME)
+.dsh-smoke/
+
+# ZCode session-local workspace state
+.zcode/

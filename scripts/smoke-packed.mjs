@@ -1,0 +1,79 @@
+/**
+ * smoke:packed — does the SHIPPED tarball behave like the checkout?
+ *
+ * `smoke:compose` proves the repository's working tree; this smoke proves the
+ * artifact a user actually installs. It packs the repository, then runs the
+ * composition smoke in a child process with two switches:
+ *
+ * - `DSH_SMOKE_PLUGIN_SOURCE` — `dsh plugin add` installs the tarball, so the
+ *   composed profile exercises the packed files;
+ * - `DSH_SMOKE_HOME` — a scratch home OUTSIDE the repository, so the install
+ *   resolves the plugin outside the checkout.
+ *
+ * The first `dsh plugin add <tgz>` may stop at pnpm's build-approval prompt for
+ * `koffi`; the shared installer then applies the documented recovery (pending
+ * `allowBuilds` set inside the SCRATCH profile only — never a repo file) and
+ * prints the verbatim exchange, so the troubleshooting doc can quote it.
+ *
+ * @module scripts/smoke-packed
+ */
+
+import { spawn } from 'node:child_process'
+import { existsSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { packTarball } from './check-pack.mjs'
+import { removeScratchTree } from './lib/smoke-cleanup.mjs'
+
+const REPO_ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)))
+const keep = process.env.DSH_SMOKE_KEEP === '1'
+
+if (!existsSync(join(REPO_ROOT, 'lib', 'index.js'))) {
+  console.error('[smoke:packed] lib/ is missing — run `pnpm build` before the smoke')
+  process.exit(1)
+}
+
+const { dir: packDir, tarball } = packTarball()
+console.log(`[smoke:packed] packed artifact: ${tarball}`)
+
+// The scratch home MUST live outside the repository: the install must resolve
+// the plugin from the tarball, never from the checkout.
+const smokeHome = join(tmpdir(), `dsh-packed-${process.pid}`)
+console.log(`[smoke:packed] scratch home root: ${smokeHome}`)
+
+const child = spawn(process.execPath, [join(REPO_ROOT, 'scripts', 'smoke-compose.mjs')], {
+  stdio: 'inherit',
+  env: {
+    ...process.env,
+    DSH_SMOKE_PLUGIN_SOURCE: tarball,
+    DSH_SMOKE_HOME: smokeHome,
+    // This child loads the installed koffi.node. Windows cannot delete it
+    // until the child exits; this parent owns ALL home cleanup after close.
+    DSH_SMOKE_DEFER_HOME_CLEANUP: '1',
+  },
+})
+let code
+try {
+  code = await new Promise((settle, fail) => {
+    child.on('error', fail)
+    child.on('close', value => settle(value ?? 1))
+  })
+} finally {
+  try {
+    if (keep) {
+      console.log(`[smoke:packed] kept scratch home root at ${smokeHome}`)
+    } else {
+      console.log('[smoke:packed] child closed; removing scratch home')
+      await removeScratchTree(smokeHome)
+    }
+  } finally {
+    await removeScratchTree(packDir)
+  }
+}
+
+if (code !== 0) {
+  console.error(`[smoke:packed] the packed artifact failed the composition smoke (exit ${code})`)
+  process.exit(code)
+}
+console.log('[smoke:packed] the packed artifact passed the composition smoke')

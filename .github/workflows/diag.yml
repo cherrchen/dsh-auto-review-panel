@@ -1,0 +1,39 @@
+name: diag
+
+# Single-lane diagnostic for the client-bundle contract: the artifact shape the
+# Web client accepts is easy to break silently (a bundler flag, a renamed
+# export, a stray relative specifier), so this job runs the exact assertion on
+# relevant edits as well as dispatch — a diagnostic workflow need not first
+# land on the default branch. The full CI matrix remains the acceptance gate.
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'src/client/**'
+      - 'tsdown.config.ts'
+      - 'tests/client-bundle.spec.ts'
+      - 'cordis.patch.yml'
+      - '.github/workflows/diag.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  client-bundle:
+    runs-on: ubuntu-latest
+    env:
+      CI: 'true'
+      FORCE_COLOR: '0'
+      TERM: dumb
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.25.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.19.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm vitest run tests/client-bundle.spec.ts tests/patch.spec.ts

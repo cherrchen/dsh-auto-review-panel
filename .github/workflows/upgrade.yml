@@ -1,0 +1,126 @@
+# Upgrade smoke: does this plugin still hold on a dsh release it has never been
+# verified against?
+#
+# The panel rides on surfaces upstream makes no semver promise for — the
+# client slot names, the Connection channel, and the composition rows it
+# mounts — so this job exists to find that out EARLY, on a schedule, instead
+# of at the moment somebody upgrades their harness.
+#
+# What it does NOT do, on purpose: widen the support matrix. A green run here is
+# evidence that a release could be supported, never the authorization. Promoting
+# a release means a human edits SUPPORTED_DSH_RELEASES and peerDependencies and
+# lands it as a reviewed change — see docs/decisions/ADR-0001-dsh-compat-contract.md.
+# That is why the whole matrix runs under DSH_AUTO_REVIEW_PANEL_COMPAT=warn: the
+# runtime gate would otherwise (correctly) refuse to mount the panel rows here.
+name: Upgrade smoke
+
+on:
+  schedule:
+    # Mondays, 04:17 UTC. Off the hour so this job is not queued behind every
+    # other repository's hourly cron.
+    - cron: '17 4 * * 1'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'dsh version to test (e.g. 0.2.1-rc.3). Empty resolves the newest published pre-release.'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  upgrade:
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+    runs-on: ${{ matrix.os }}
+    env:
+      CI: 'true'
+      FORCE_COLOR: '0'
+      TERM: dumb
+      # The candidate is by definition not on the allowlist yet, so the gate is
+      # asked to warn instead of refuse. This is the one supported use of the
+      # variable; production deployments leave it unset.
+      DSH_AUTO_REVIEW_PANEL_COMPAT: warn
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.25.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.19.0
+          cache: pnpm
+
+      - name: Resolve the candidate release
+        id: candidate
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
+        run: |
+          if [ -n "$REQUESTED_VERSION" ]; then
+            version="$REQUESTED_VERSION"
+          else
+            version="$(node scripts/upgrade-dsh.mjs --print-latest-prerelease)"
+          fi
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$ ]]; then
+            echo "Invalid candidate version" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "### Candidate: \`$version\`" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Repoint the pin at the candidate
+        env:
+          CANDIDATE_VERSION: ${{ steps.candidate.outputs.version }}
+        run: node scripts/upgrade-dsh.mjs "$CANDIDATE_VERSION"
+      # A candidate release drags in every transitive @deepseek-ai package, all
+      # published minutes ago; the release-age gate is bypassed for this
+      # throwaway tree rather than enumerated in pnpm-workspace.yaml (ADR-0002).
+      # Written INTO the workspace config because `install` re-audits lockfile
+      # ages against the file, and every later `pnpm run` verifies them again.
+      - name: Install the candidate
+        run: |
+          echo 'minimumReleaseAge: 0' >> pnpm-workspace.yaml
+          pnpm install --no-frozen-lockfile
+      # The declared pin and the RESOLVED tree are different facts, and the
+      # second one is what everything below actually ran against.
+      - name: Report the tree under test
+        run: node scripts/upgrade-dsh.mjs --print-installed
+
+      - run: pnpm lint
+      - run: pnpm typecheck
+      # Build first: tests/client-bundle.spec.ts asserts the BUILT browser
+      # artifact, and lib/ is not in Git.
+      - run: pnpm build
+      - run: pnpm test > vitest.log 2>&1
+      - run: pnpm smoke:compose
+
+      - name: Upload the logs when a step failed
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: upgrade-logs-${{ matrix.os }}
+          path: |
+            vitest.log
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: State what a green run does and does not mean
+        if: success()
+        env:
+          CANDIDATE_VERSION: ${{ steps.candidate.outputs.version }}
+          RUNNER_OS_NAME: ${{ matrix.os }}
+        run: |
+          {
+            echo "dsh \`$CANDIDATE_VERSION\` passed the full matrix on $RUNNER_OS_NAME."
+            echo
+            echo "This does NOT make it a supported release. To promote it:"
+            echo
+            echo '1. add it to `SUPPORTED_DSH_RELEASES` in `src/compat/dsh-version.ts`;'
+            echo '2. widen every dsh `peerDependencies` range to the new allowlist;'
+            echo '3. run `pnpm compat:check` and land it as a reviewed change.'
+          } >> "$GITHUB_STEP_SUMMARY"
