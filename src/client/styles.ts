@@ -10,9 +10,16 @@ export const STYLES = `
 .arp-header { display: flex; align-items: center; gap: 8px; padding: 6px 8px; flex-wrap: wrap; }
 .arp-link { color: var(--dsh-link, #6ea8fe); }
 .arp-filter { display: flex; align-items: center; gap: 4px; }
-.arp-header-actions { margin-left: auto; display: flex; gap: 4px; }
-.arp-header-icon { background: var(--dsw-alias-bg-layer-1); border-radius: 6px; color: var(--dsw-alias-label-primary); }
+.arp-header-actions { display: flex; gap: 4px; flex: none; }
+.arp-header-icon { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0; flex: none; border: none; border-radius: var(--dsw-radius-sm); background: transparent; color: var(--dsw-alias-label-secondary); cursor: pointer; line-height: 1; }
 .arp-header-icon:hover:not(:disabled) { background: var(--dsw-alias-interactive-bg-hover); }
+.arp-time-range { display: flex; align-items: center; gap: 4px; flex: 1 1 0; min-width: 0; }
+.arp-time-field { display: inline-flex; align-items: center; gap: 3px; flex: 0 1 auto; min-width: 0; }
+.arp-time-field-label { flex: none; opacity: 0.7; font-size: 11px; }
+.arp-time-input { flex: 0 1 auto; width: auto; min-width: 0; height: 28px; padding: 0 4px; box-sizing: border-box; border: 0.5px solid var(--dsw-alias-border-l3); border-radius: var(--dsw-radius-sm); background: transparent; color: var(--dsw-alias-label-primary); font: inherit; font-size: 11px; }
+.arp-time-input:hover { background: var(--dsw-alias-interactive-bg-hover); }
+.arp-time-input:focus { outline: none; border-color: var(--dsw-alias-state-business-primary); }
+body[data-ds-dark-theme] .arp-time-input { color-scheme: dark; }
 .arp-list { overflow: auto; }
 .arp-group-title { padding: 6px 8px 2px; font-weight: 600; opacity: 0.7; }
 .arp-row { display: flex; flex-direction: column; gap: 2px; width: 100%; text-align: left; padding: 5px 8px; background: none; border: none; cursor: pointer; font: inherit; color: inherit; }
@@ -64,7 +71,8 @@ export const STYLES = `
 .arp-mono { font-family: monospace; font-size: 11px; word-break: break-word; }
 .arp-items { margin: 0; padding-left: 18px; }
 .arp-none { opacity: 0.5; }
-.arp-about { max-width: 560px; }
+.arp-about { width: min(720px, 100%); font-size: 12px; }
+.arp-about p { font-size: 12px; line-height: 1.5; }
 .arp-about-content { overflow: auto; max-height: 70vh; }
 .arp-about-subtitle { font-weight: 600; margin: 8px 0 4px; }
 .arp-about-body { opacity: 0.85; line-height: 1.5; }

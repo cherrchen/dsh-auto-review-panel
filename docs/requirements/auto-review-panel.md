@@ -67,7 +67,7 @@ Auto 权限预设下，每一次工具执行都先经 Auto Review 审查器裁�
 ### 4.3 面板呈现（客户端半部）
 
 `sidebarRightTabs.register({ id, kind: 'auto-review', title, guide })` 注册 tab 类型 + `ctx.slots.inject('sidebar.right.pane.tab', …)` 贡献面板体（两阶段注册，与 session-inspector 同构）；面板是会话域 slot 贡献，inject 收到槽位传入的 sessionId 即完成绑定。client `inject` 需求随此扩展：`slots`、`locale`、`connection`、`sidebarRightTabs`；`dsh.client.inject` 同步加 `@deepseek-ai/dsh-client-ui-sidebar-right`。
-- **列表**（每条审查一行，至多三行排版、行间无分割线）：第一行左侧 = 工具名 + mode 徽标（native/ptc-inner），右侧 = risk 标签 + 裁决 chip 两个着色 Tag（**allow/deny/error/failed 四种——`ask` 不是 reviewer decision 而是宿主处置，v1 不显示**）；第二行 = 标识性参数预览独占一行（exec 类为 `command`、文件类为 `path`/`file_path`，无字符串参数时该行如实缺席）；第三行 = 依据行（deny 的 reason 截断；allow 显示"协议不携带理由"，reasoning 在详情里）最右端时间。检索范围 v1：会话过滤（默认当前会话；**"未关联"组的记录恒可见**——deny+never 的记录没有 sessionId，恰是最高风险的那批）+ risk/decision 轻量多选筛选；全文检索不留 v1。
+- **列表**（每条审查一行，至多三行排版、行间无分割线）：第一行左侧 = 工具名 + mode 徽标（native/ptc-inner），右侧 = risk 标签 + 裁决 chip 两个着色 Tag（**allow/deny/error/failed 四种——`ask` 不是 reviewer decision 而是宿主处置，v1 不显示**）；第二行 = 标识性参数预览独占一行（exec 类为 `command`、文件类为 `path`/`file_path`，无字符串参数时该行如实缺席）；第三行 = 依据行（deny 的 reason 截断；allow 显示"协议不携带理由"，reasoning 在详情里）最右端时间。检索范围 v1：会话过滤（默认当前会话；**"未关联"组的记录恒可见**——deny+never 的记录没有 sessionId，恰是最高风险的那批）+ risk/decision/tool 轻量多选筛选 + 审查时间起止范围（闭区间；起点/终点各自可单独生效，起止倒置时如实无命中，可一键清除）；tool 选项由宿主从实时工具注册表读取（`ctx.tools.schemas(agent)`，agent 由 `ctx.agents.get(sessionId)` 定位；排除 reviewer 从不审查的 `run_code`），**不从已捕获记录反推**，也不预置静态清单——上游工具名为 `read`/`write`/`edit`/`read_image`/`glob`/`grep`/`bash`/`pwsh`/`todo_write`/`web_*` 等，按组合挂载；注册表不可读时无选项如实降级；全文检索不留 v1。
 - **详情**（概览 + tab 分区，与会话视图的"对话/轨迹"切换同构）：
   - 顶部概览卡（约 1/4 高度、内容驱动不写死）：risk 标签 + 裁决 chip + reason 全文（或 allow 的协议说明）+ `provider/model` 一行 + 审查时间 + 工具名 + `arguments` 的标识性参数（command/file_path）与 `description` 各一行 + `finish` 异常（如有）；
   - 四个 tab：`工具调用`（pendingAction）、`审查上下文`（FILTERED_HISTORY 逐条、**按原始 `role`/`source.kind` 展示不重分类**——multi-root fork 会渲染 `current-root-instructions` 等额外条目，原样呈现）、`项目环境`（PROJECT_INSTRUCTIONS 与 ENVIRONMENT 同一面板）、`审查结果`（`思考` 折叠块收 reasoning，`output.rawText` 按 JSON 解析呈现，解析失败按原文）。每个 tab 的内容用上游 `JsonTree` 可视化；REVIEW_POLICY 是固定策略文本，不在每条记录里展开——唯一露面处是面板 header 的帮助/信息 popover（About），其中同时标明当前挂载的审查器包名（`status.reviewerPackage`，读不出时如实缺席）。
@@ -119,5 +119,5 @@ Auto 权限预设下，每一次工具执行都先经 Auto Review 审查器裁�
 - 记录推送：v1 用客户端轮询还是通道订阅（`rpc.handle` 支持事件推送的形态需按 connection 现状定）。
 - ~~关联时机~~ **已收口（M3）**：prepend 延迟注册经真实组合实测采纳——`smoke:live` 断言 `deny+never` 回填 `correlation` 与 `denialInfo{AUTO_REVIEW_DENIED}`；机制与退路见架构文档 §3.1。
 - ~~全局缓冲上限~~ **已收口（M3）**：长跑实测单条驻留约 2 KiB（16 KiB JSON），200 全局帽 ≈ 0.3 MiB，50/200 上限按证据保留。
-- 「检索」的 v1 范围定为：会话过滤 + risk/decision 多选筛选；按工具名/参数的全文检索不在 v1。
+- 「检索」的 v1 范围定为：会话过滤 + risk/decision/tool 多选筛选 + 审查时间起止范围；按工具名/参数的全文检索不在 v1。
 - 「上下文维护」的 v1 范围定为：每条审查的最终快照（policy + 四节 + requestText）；跨调用的上下文演化/差分视图是另一个功能，不在本插件承诺内。

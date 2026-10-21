@@ -197,6 +197,8 @@ export interface HostFixtureOptions {
   readonly sessions?: Map<string, unknown>
   readonly globalCapacity?: number
   readonly sessionCapacity?: number
+  /** The registry names the fixture host reports; omitted leaves the status unread. */
+  readonly toolNames?: readonly string[]
 }
 
 /**
@@ -223,6 +225,9 @@ export function makeHost(options: HostFixtureOptions = {}): ReviewCaptureHost {
       let next = 0
       return () => `review-${++next}`
     })(),
+    ...(options.toolNames === undefined
+      ? {}
+      : { listToolNames: () => options.toolNames ?? [] }),
     ...(options.globalCapacity === undefined ? {} : { globalCapacity: options.globalCapacity }),
     ...(options.sessionCapacity === undefined ? {} : { sessionCapacity: options.sessionCapacity }),
   })

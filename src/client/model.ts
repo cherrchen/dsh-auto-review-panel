@@ -25,10 +25,19 @@ export type VerdictChip = 'allow' | 'deny' | 'error' | 'failed'
  * value is among the chosen options, and an unset or empty set filters
  * nothing. A record the host left without the field matches no chosen
  * option — an absent field stays absent, never counted as a match.
+ *
+ * `from`/`to` are `<input type="datetime-local">` values (local wall-clock,
+ * no zone), converted to absolute instants only while filtering. Bounds are
+ * inclusive; an unparsable bound filters nothing, and a record whose
+ * `capturedAt` cannot be parsed never matches an active range.
  */
 export interface ListFilters {
   readonly risk?: readonly ReviewRisk[]
   readonly decision?: readonly ReviewDecision[]
+  /** Exact `action.name` values; options come from the records actually listed. */
+  readonly tool?: readonly string[]
+  readonly from?: string
+  readonly to?: string
 }
 
 /** The Auto preset identity, mirroring the host's AUTO_PRESET. */
@@ -82,6 +91,11 @@ export interface RecordGroups {
   readonly uncorrelated: readonly ReviewRecordSummary[]
 }
 
+/** One `datetime-local` value as an absolute instant; NaN when unset or malformed. */
+function instantOf(value: string | undefined): number {
+  return value === undefined || value === '' ? Number.NaN : new Date(value).getTime()
+}
+
 /**
  * Split one list into its two display groups. The host's session filter
  * already keeps every uncorrelated record; grouping is purely presentational.
@@ -90,11 +104,22 @@ export interface RecordGroups {
  * @returns the two groups, each still newest first.
  */
 export function groupSummaries(records: readonly ReviewRecordSummary[], filters: ListFilters = {}): RecordGroups {
+  const from = instantOf(filters.from)
+  const to = instantOf(filters.to)
+  const passTime = (capturedAt: string): boolean => {
+    if (Number.isNaN(from) && Number.isNaN(to)) return true
+    const instant = new Date(capturedAt).getTime()
+    if (Number.isNaN(instant)) return false
+    return (Number.isNaN(from) || instant >= from) && (Number.isNaN(to) || instant <= to)
+  }
   const pass = (record: ReviewRecordSummary): boolean =>
     (filters.risk === undefined || filters.risk.length === 0
       || (record.risk !== undefined && filters.risk.includes(record.risk)))
     && (filters.decision === undefined || filters.decision.length === 0
       || (record.decision !== undefined && filters.decision.includes(record.decision)))
+    && (filters.tool === undefined || filters.tool.length === 0
+      || (record.action.name !== undefined && filters.tool.includes(record.action.name)))
+    && passTime(record.capturedAt)
   return {
     correlated: records.filter(record => record.correlated && pass(record)),
     uncorrelated: records.filter(record => !record.correlated && pass(record)),

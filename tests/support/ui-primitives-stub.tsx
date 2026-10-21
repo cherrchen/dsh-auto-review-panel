@@ -16,6 +16,7 @@ function icon(name: string) {
   }
 }
 export const IconChevronDownOutlineRegular = icon('chevron-down')
+export const IconCloseOutlineRegular = icon('close')
 export const IconInfoOutlineRegular = icon('info')
 export const IconRefreshOutlineRegular = icon('refresh')
 
@@ -31,6 +32,14 @@ const e2 = createElement
 
 export function StateDot({ className }: { className?: string }) {
   return createElement('span', { className })
+}
+
+export function Tooltip({ label, children }: {
+  label: string | (() => string)
+  children?: ReactNode
+  [key: string]: unknown
+}) {
+  return e2('span', { className: 'arp-tooltip-anchor', 'data-tooltip': label }, children)
 }
 
 export function DisclosureRow({ title, open, onToggle, children, className, titleClassName }: {

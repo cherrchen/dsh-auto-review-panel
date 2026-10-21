@@ -194,6 +194,13 @@ export interface PanelStatus {
    * the host read it back.
    */
   readonly reviewerPackage?: string
+  /**
+   * The tool names the session's agent can see in the live registry, sorted.
+   * Read from the registry, never inferred from captured records; the reserved
+   * `run_code` transport is excluded because the reviewer never reviews the
+   * transport itself. Absent when the host cannot read the registry.
+   */
+  readonly tools?: readonly string[]
 }
 
 /** `list` success value. Records are newest first. */

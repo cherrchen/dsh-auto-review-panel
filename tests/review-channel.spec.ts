@@ -42,6 +42,12 @@ describe('panel endpoints', () => {
     expect(value.status).toEqual({ reviewerAvailable: true })
   })
 
+  it('lists the live registry tools in the status, sorted and without run_code', () => {
+    const host = makeHost({ toolNames: ['run_code', 'read', 'bash', 'read'] })
+    const value = listValue(host.handle('list', { sessionId: 'session-1' }))
+    expect(value.status.tools).toEqual(['bash', 'read'])
+  })
+
   it('reports reviewerAvailable false when the Auto preset is not advertised', () => {
     const host = makeHost({ names: ['workspace-write'] })
     const value = listValue(host.handle('list', undefined))

@@ -23,6 +23,7 @@ import {
   Button,
   DisclosureRow,
   IconChevronDownOutlineRegular,
+  IconCloseOutlineRegular,
   IconInfoOutlineRegular,
   IconRefreshOutlineRegular,
   JsonTree,
@@ -30,6 +31,7 @@ import {
   Modal,
   Tag,
   TextShimmer,
+  Tooltip,
   type JsonTreeLabels,
   type MenuEntry,
   type TagTone,
@@ -335,6 +337,61 @@ function MultiFilter({ label, options, selected, onChange }: {
   })
 }
 
+/**
+ * The two local `datetime-local` bounds. Values are wall-clock strings with no
+ * zone — the same shape the native control reads and writes — and the model
+ * turns them into absolute instants only while filtering.
+ */
+function TimeRange({ from, to, onChange, t }: {
+  readonly from: string | undefined
+  readonly to: string | undefined
+  readonly onChange: (next: { from?: string; to?: string }) => void
+  readonly t: T
+}): ReactNode {
+  const bind = (key: 'from' | 'to') => (event: { readonly currentTarget: { readonly value: string } }) => {
+    const value = event.currentTarget.value
+    const nextFrom = key === 'from' ? value : from
+    const nextTo = key === 'to' ? value : to
+    const next: { from?: string; to?: string } = {}
+    if (nextFrom !== undefined && nextFrom !== '') next.from = nextFrom
+    if (nextTo !== undefined && nextTo !== '') next.to = nextTo
+    onChange(next)
+  }
+  return e('div', { className: 'arp-time-range' },
+    e('label', { className: 'arp-time-field' },
+      e('span', { className: 'arp-time-field-label' }, t('filter.time.from')),
+      e('input', {
+        type: 'datetime-local',
+        className: 'arp-time-input',
+        'aria-label': t('filter.time.fromAria'),
+        value: from ?? '',
+        max: to === undefined || to === '' ? undefined : to,
+        onChange: bind('from'),
+      })),
+    e('label', { className: 'arp-time-field' },
+      e('span', { className: 'arp-time-field-label' }, t('filter.time.to')),
+      e('input', {
+        type: 'datetime-local',
+        className: 'arp-time-input',
+        'aria-label': t('filter.time.toAria'),
+        value: to ?? '',
+        min: from === undefined || from === '' ? undefined : from,
+        onChange: bind('to'),
+      })),
+    from === undefined && to === undefined ? null
+      : e(Tooltip, {
+          label: t('filter.time.clear'),
+          side: 'bottom',
+          delayMs: 500,
+          children: e('button', {
+            type: 'button',
+            className: 'arp-header-icon',
+            'aria-label': t('filter.time.clear'),
+            onClick: () => onChange({}),
+          }, e(IconCloseOutlineRegular, { size: 14 })),
+        }))
+}
+
 /** The header's About dialog: the single place REVIEW_POLICY appears. */
 function About({ open, policy, reviewer, onClose, t }: {
   readonly open: boolean
@@ -422,6 +479,11 @@ export function AutoReviewPanel(props: AutoReviewPanelProps): ReactNode {
   const state = emptyStateOf(snapshot)
   const groups = snapshot.phase === 'ready' ? groupSummaries(snapshot.value.records, filters) : undefined
   const status = snapshot.phase === 'ready' ? snapshot.value.status : undefined
+  // Options are the host's live registry list, not the captured records, plus
+  // any still-selected value so a tool that left the registry stays clearable.
+  const registryTools = snapshot.phase === 'ready' ? snapshot.value.status.tools ?? [] : []
+  const tools = [...new Set([...registryTools, ...(filters.tool ?? [])])]
+    .sort((left, right) => left.localeCompare(right))
 
   return e('div', { className: 'arp-panel' },
     e('div', { className: 'arp-header' },
@@ -457,24 +519,54 @@ export function AutoReviewPanel(props: AutoReviewPanelProps): ReactNode {
             return updated
           }),
       }),
+      e(MultiFilter, {
+        label: t('filter.tool'),
+        options: tools.map(name => ({ id: name, label: name })),
+        selected: filters.tool ?? [],
+        onChange: (next: readonly string[]) =>
+          setFilters(current => {
+            const updated = { ...current }
+            if (next.length === 0) delete updated.tool
+            else updated.tool = next
+            return updated
+          }),
+      }),
+      e(TimeRange, {
+        from: filters.from,
+        to: filters.to,
+        onChange: next =>
+          setFilters(current => {
+            const updated = { ...current }
+            if (next.from === undefined) delete updated.from
+            else updated.from = next.from
+            if (next.to === undefined) delete updated.to
+            else updated.to = next.to
+            return updated
+          }),
+        t,
+      }),
       e('div', { className: 'arp-header-actions' },
-        e(Button, {
-          variant: 'toolbar',
-          size: 'sm',
-          className: 'arp-header-icon',
-          icon: e(IconRefreshOutlineRegular, { size: 16 }),
-          'aria-label': t('list.refresh'),
-          title: t('list.refresh'),
-          onClick: () => refresh(),
+        e(Tooltip, {
+          label: t('list.refresh'),
+          side: 'bottom',
+          delayMs: 500,
+          children: e('button', {
+            type: 'button',
+            className: 'arp-header-icon',
+            'aria-label': t('list.refresh'),
+            onClick: () => refresh(),
+          }, e(IconRefreshOutlineRegular, { size: 16 })),
         }),
-        e(Button, {
-          variant: 'toolbar',
-          size: 'sm',
-          className: 'arp-header-icon',
-          icon: e(IconInfoOutlineRegular, { size: 16 }),
-          'aria-label': t('about.label'),
-          title: t('about.label'),
-          onClick: openAbout,
+        e(Tooltip, {
+          label: t('about.label'),
+          side: 'bottom',
+          delayMs: 500,
+          children: e('button', {
+            type: 'button',
+            className: 'arp-header-icon',
+            'aria-label': t('about.label'),
+            onClick: openAbout,
+          }, e(IconInfoOutlineRegular, { size: 16 })),
         }))),
     e(About, { open: about, policy, reviewer: status?.reviewerPackage, onClose: () => setAbout(false), t }),
     snapshot.phase === 'loading'

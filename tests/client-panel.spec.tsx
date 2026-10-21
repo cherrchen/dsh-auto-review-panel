@@ -75,9 +75,21 @@ function record(overrides: Partial<ReviewRecord> = {}): ReviewRecord {
 function listValue(overrides: Partial<PanelListValue> = {}): PanelListValue {
   return {
     records: [summary()],
-    status: { reviewerAvailable: true, sessionPreset: 'auto', reviewerPackage: '@deepseek-ai/dsh-experimental-auto-review' },
+    status: {
+      reviewerAvailable: true,
+      sessionPreset: 'auto',
+      reviewerPackage: '@deepseek-ai/dsh-experimental-auto-review',
+      tools: ['bash', 'glob', 'read', 'write'],
+    },
     ...overrides,
   }
+}
+
+/** One UTC instant as the local wall-clock value a datetime-local input carries. */
+function localInput(iso: string): string {
+  const date = new Date(iso)
+  const pad = (value: number): string => String(value).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 
 /** Dictionary-driven translate for copy assertions. */
@@ -282,6 +294,50 @@ describe('the five-field list row', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: zh['filter.risk.high'] }))
     await waitFor(() => expect(container.querySelectorAll('.arp-row')).toHaveLength(1))
     expect(container.querySelector('.arp-row-name')?.textContent).toBe('rm')
+  })
+
+  it('filters by the host registry tool list, not the captured rows', async () => {
+    const harness = mount({
+      list: () => listValue({
+        records: [
+          summary({ id: 'r1', action: { name: 'read', mode: 'native', preview: 'a.md' } }),
+          summary({ id: 'r2', action: { name: 'bash', mode: 'native', preview: 'ls' } }),
+          summary({ id: 'r3', action: { name: 'bash', mode: 'native', preview: 'pwd' } }),
+        ],
+      }),
+    })
+    const { container } = renderPane(harness)
+    await screen.findByText('read')
+    fireEvent.click(screen.getByText(zh['filter.tool']))
+    // `glob` appears in the host status but in no row — the registry is the source.
+    expect(screen.getByRole('menuitem', { name: 'glob' })).toBeTruthy()
+    expect(screen.getByRole('menuitem', { name: 'write' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('menuitem', { name: 'bash' }))
+    await waitFor(() => expect(container.querySelectorAll('.arp-row')).toHaveLength(2))
+    expect([...container.querySelectorAll('.arp-row-name')].map(node => node.textContent)).toEqual(['bash', 'bash'])
+  })
+
+  it('filters by the review time range and clears it', async () => {
+    const harness = mount({
+      list: () => listValue({
+        records: [
+          summary({ id: 'early', capturedAt: '2026-10-20T08:00:00.000Z', action: { name: 'read', mode: 'native' } }),
+          summary({ id: 'middle', capturedAt: '2026-10-20T10:00:00.000Z', action: { name: 'write', mode: 'native' } }),
+          summary({ id: 'late', capturedAt: '2026-10-20T12:00:00.000Z', action: { name: 'bash', mode: 'native' } }),
+        ],
+      }),
+    })
+    const { container } = renderPane(harness)
+    await screen.findByText('read')
+    const from = screen.getByLabelText(zh['filter.time.fromAria'])
+    const to = screen.getByLabelText(zh['filter.time.toAria'])
+    fireEvent.change(from, { target: { value: localInput('2026-10-20T09:00:00.000Z') } })
+    await waitFor(() => expect(container.querySelectorAll('.arp-row')).toHaveLength(2))
+    fireEvent.change(to, { target: { value: localInput('2026-10-20T11:00:00.000Z') } })
+    await waitFor(() => expect(container.querySelectorAll('.arp-row')).toHaveLength(1))
+    expect(container.querySelector('.arp-row-name')?.textContent).toBe('write')
+    fireEvent.click(screen.getByLabelText(zh['filter.time.clear']))
+    await waitFor(() => expect(container.querySelectorAll('.arp-row')).toHaveLength(3))
   })
 })
 

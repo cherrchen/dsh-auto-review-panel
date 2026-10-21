@@ -27,7 +27,7 @@ tools/pre-execute listener（挂载后一个 macrotask 延迟的 prepend）
 session/event observer（tool/result、approval/asked、approval/decided）→ hostOutcome
    ▼
 PANEL_CHANNEL（connection.rpc.handle）
-   list(sessionId?) → {records: Summary[], status{reviewerAvailable, sessionPreset?}}
+   list(sessionId?) → {records: Summary[], status{reviewerAvailable, sessionPreset?, tools?}}
    get(id) → 完整 ReviewRecord
    ▼
 M2 客户端面板（sidebar.right tab）
@@ -96,10 +96,11 @@ listener 顺序不是公开契约：如果某个纤维比我们更晚 prepend，
 | --- | --- | --- |
 | `reviewerAvailable` | `permissionPresets.names` 是否含 AUTO preset | ① reviewer bundle 未启用/未安装 |
 | `sessionPreset?` | `sessions.get(sessionId)` + `permissionPresets.current(session)` | ② 会话非 Auto |
+| `tools?` | `ctx.get('tools').schemas(ctx.get('agents')?.get(sessionId))` 的 `name`，去重排序并排除 `run_code` | 工具筛选选项（非空态） |
 
-两个字段的读取都包在 `try` 里：**catalog 读不出时 `reviewerAvailable` 保守报 `true`**（需求把"判定不了"映射到空态④而非①）；`current()` 抛错或 session 未知时 `sessionPreset` 如实缺席，客户端并入空态④。空态③（宿主未挂通道）由客户端从"通道调用本身失败"推导，不经 status。
+前两个字段的读取都包在 `try` 里：**catalog 读不出时 `reviewerAvailable` 保守报 `true`**（需求把"判定不了"映射到空态④而非①）；`current()` 抛错或 session 未知时 `sessionPreset` 如实缺席，客户端并入空态④。空态③（宿主未挂通道）由客户端从"通道调用本身失败"推导，不经 status。`tools` 同样包在 `try` 里：工具注册表未挂载或读取失败时整字段缺席，客户端只是没有可选项——选项**不**从已捕获记录反推。
 
-服务注入边界（`src/panel.ts` 的 `static inject`）只有 `autoReviewPanelCompat` + `permissionPresets` + `sessions` 三个**真正调 API** 的服务；`llm`/`tools` 仅作 `ctx.on` 事件名出现——`llm` 是 optional peer，进 inject 会让合法的缺 llm 组合静默丢行。compat 门禁注入同时保证被拒绝的安装退化为"插件未安装"而非半挂载。
+服务注入边界（`src/panel.ts` 的 `static inject`）只有 `autoReviewPanelCompat` + `permissionPresets` + `sessions` 三个**真正调 API** 的服务；`llm`/`tools` 仅作 `ctx.on` 事件名或 `ctx.get` 防御性读取出现——两者都是 optional peer，进 inject 会让合法的缺失组合静默丢行。compat 门禁注入同时保证被拒绝的安装退化为"插件未安装"而非半挂载。
 
 ## 5. 客户端半部（M2 落地）
 
@@ -119,7 +120,7 @@ listener 顺序不是公开契约：如果某个纤维比我们更晚 prepend，
 
 **空态推导**（`emptyStateOf`，唯一判定点）：`failed` → ③通道缺席；`!reviewerAvailable` → ①bundle 未启用；`sessionPreset !== undefined && !== 'auto'` → ②非 Auto；`records` 为空 → ④尚无记录——`sessionPreset` 缺席按契约并入④。客户端不注入 `permissionPresets`，全部事实来自 status。`status.reviewerPackage` 是宿主经 `ctx.root.registry` 的 fiber `entry.options.name` 回读的挂载包名（`auto-review` 且非本包），About 弹层用它标明当前审查器；读不出时如实缺席。
 
-**呈现纪律**：控件全部来自 `@deepseek-ai/dsh-client-ui-primitives`（Button/Tag/Menu/DisclosureRow/JsonTree/Modal/TextShimmer + 图标，seeded 模块表词、bundle 外部引用），自有 CSS 只负责布局与行排版；列表行至多三行、行间无分割线：第一行左侧 = 工具名 + mode 徽标，右侧 = risk 标签 + 裁决 chip 两个着色 Tag；第二行 = `preview` 参数预览独占一行；第三行 = 依据行，最右端时间。分"当前会话/未关联"两组（host 的会话过滤已恒含未关联，分组是纯呈现）；risk/decision 是两个多选下拉（字段名只作触发器文案、不进选项；选中几项显示几项，宿主未给的字段不算命中），无全文检索；刷新与 About 是 header 右侧两个图标按钮。详情是"概览 + tab"布局：顶部概览卡（max-height ~30%、可滚）放着色 Tag、`provider/model`、审查时间、工具名与 arguments 的标识参数/说明行；下方同会话视图的下划线 tab 条（role=tab 排 + 激活下划线，该条在上游为会话私有不导出）四个面板——`工具调用`（pendingAction）、`审查上下文`（FILTERED_HISTORY 按原始 `kind`/`role`/`source.kind` 逐条不重分类）、`项目环境`（PROJECT_INSTRUCTIONS+ENVIRONMENT 同一面板）、`审查结果`（`思考` 折叠块收 reasoning 原文、`output.rawText` 紧跟其后无标题）；每个面板先走上游 `JsonTree`（轨迹检查器同款组件，copy 菜单关闭）；仅活动面板进 DOM；REVIEW_POLICY 仅在 header About 弹出层出现（从最新一条记录的 `sections.policy` 读取，无记录时如实说明而非编造）。
+**呈现纪律**：控件全部来自 `@deepseek-ai/dsh-client-ui-primitives`（Button/Tag/Menu/DisclosureRow/JsonTree/Modal/TextShimmer + 图标，seeded 模块表词、bundle 外部引用），自有 CSS 只负责布局与行排版；列表行至多三行、行间无分割线：第一行左侧 = 工具名 + mode 徽标，右侧 = risk 标签 + 裁决 chip 两个着色 Tag；第二行 = `preview` 参数预览独占一行；第三行 = 依据行，最右端时间。分"当前会话/未关联"两组（host 的会话过滤已恒含未关联，分组是纯呈现）；risk/decision/tool 是三个多选下拉（字段名只作触发器文案、不进选项；选中几项显示几项，宿主未给的字段不算命中；tool 选项来自宿主 `status.tools`——实时工具注册表里该会话 agent 可见的名字，排除 `run_code`，不取已捕获记录——外加仍处于选中态但已不在注册表里的值，保证可取消），无全文检索；审查时间紧接在 tool 之后、刷新按钮之前，`flex: 1 1 0` 精确占满这二者之间的剩余宽度：两个原生 `datetime-local` 输入（本地墙钟，闭区间，起点/终点可单独生效，11px 字号、28px 高、`--dsw-radius-sm`/`--dsw-alias-border-l3` 对齐筛选触发器，输入框按内容固有宽度显示、不拉伸，组件右侧余量留白，深色主题设 `color-scheme: dark`），有值时出现清除图标按钮；刷新与 About 是 header 行末的两个图标按钮。详情是"概览 + tab"布局：顶部概览卡（max-height ~30%、可滚）放着色 Tag、`provider/model`、审查时间、工具名与 arguments 的标识参数/说明行；下方同会话视图的下划线 tab 条（role=tab 排 + 激活下划线，该条在上游为会话私有不导出）四个面板——`工具调用`（pendingAction）、`审查上下文`（FILTERED_HISTORY 按原始 `kind`/`role`/`source.kind` 逐条不重分类）、`项目环境`（PROJECT_INSTRUCTIONS+ENVIRONMENT 同一面板）、`审查结果`（`思考` 折叠块收 reasoning 原文、`output.rawText` 紧跟其后无标题）；每个面板先走上游 `JsonTree`（轨迹检查器同款组件，copy 菜单关闭）；仅活动面板进 DOM；REVIEW_POLICY 仅在 header About 弹出层出现（从最新一条记录的 `sections.policy` 读取，无记录时如实说明而非编造）。
 
 
 **注入**：`inject = [slots, locale, connection, sidebarRightTabs]`；`connection` 是必需 inject——缺席组合里本插件的 client 行不启动、tab 不存在（与宿主门禁同型的"未安装"退化）；`ctx.get` 是防御性读法，覆盖 apply 之后服务被替换的形状漂移，通道缺席空态经调用失败到达而非经 Connection 缺席。`dsh.client.inject` 同步 `@deepseek-ai/dsh-client-ui-sidebar-right`。轨迹导航曾在本里程碑评估并撤销：可见 tab 切换走 `conversation.session` 私有 inject 面的 store actions（公开服务面无写口），call 级 focus 同理，无可靠接缝时宁可不提供按钮。

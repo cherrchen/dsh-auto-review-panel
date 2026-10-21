@@ -62,6 +62,19 @@ export default class AutoReviewPanelService extends Service {
           return []
         }
       },
+      // Both services are optional peers, so they are read through `ctx.get`
+      // rather than `inject`: a composition without a tool registry keeps the
+      // panel row mounted, it just offers no registry tool options. The
+      // session's agent scopes the view, so restrictions and scoped
+      // registrations resolve exactly as the model sees them.
+      listToolNames: sessionId => {
+        const tools = ctx.get('tools') as {
+          schemas(scope?: unknown): readonly { readonly name: string }[]
+        } | undefined
+        if (tools === undefined) return []
+        const agents = ctx.get('agents') as { get(id: string): unknown } | undefined
+        return tools.schemas(agents?.get(sessionId)).map(schema => schema.name)
+      },
     })
 
     // Both observation listeners use the default append position: the

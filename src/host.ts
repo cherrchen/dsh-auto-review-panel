@@ -75,6 +75,11 @@ export interface ReviewCaptureHostOptions {
    * the About line shows the reviewer package only when the host can read it.
    */
   readonly listPluginNames?: () => readonly string[]
+  /**
+   * Enumerate the tool names one session's agent can see. Optional: the tool
+   * filter shows registry options only when the host can read the registry.
+   */
+  readonly listToolNames?: (sessionId: string) => readonly string[]
   readonly now?: () => string
   readonly createId?: () => string
   readonly globalCapacity?: number
@@ -168,6 +173,7 @@ export class ReviewCaptureHost {
   readonly #autoPreset: string
   readonly #runCodeName: string
   readonly #listPluginNames: () => readonly string[]
+  readonly #listToolNames: ((sessionId: string) => readonly string[]) | undefined
   readonly #now: () => string
   readonly #createId: () => string
   readonly #inFlight = new Set<TrackedExecution>()
@@ -204,6 +210,7 @@ export class ReviewCaptureHost {
     this.#autoPreset = options.autoPreset
     this.#runCodeName = options.runCodeName
     this.#listPluginNames = options.listPluginNames ?? (() => [])
+    this.#listToolNames = options.listToolNames
     this.#now = options.now ?? (() => new Date().toISOString())
     this.#createId = options.createId ?? (() => `review-${++this.#recordCounter}`)
     const bufferOptions: ReviewRecordBufferOptions = {
@@ -342,10 +349,30 @@ export class ReviewCaptureHost {
     const reviewerAvailable = this.#reviewerAvailable()
     const sessionPreset = sessionId === undefined ? undefined : this.#sessionPreset(sessionId)
     const reviewerPackage = this.#reviewerPackage()
+    const tools = this.#toolNames(sessionId)
     return {
       reviewerAvailable,
       ...(sessionPreset === undefined ? {} : { sessionPreset }),
       ...(reviewerPackage === undefined ? {} : { reviewerPackage }),
+      ...(tools === undefined ? {} : { tools }),
+    }
+  }
+
+  /**
+   * The tool names the session's agent can see, read from the live registry.
+   * The reserved `run_code` transport is excluded: the reviewer skips it, so
+   * an option for it could never match a record.
+   */
+  #toolNames(sessionId: string | undefined): readonly string[] | undefined {
+    if (sessionId === undefined || this.#listToolNames === undefined) return undefined
+    try {
+      const names = new Set<string>()
+      for (const name of this.#listToolNames(sessionId)) {
+        if (name.length > 0 && name !== this.#runCodeName) names.add(name)
+      }
+      return [...names].sort((left, right) => left.localeCompare(right))
+    } catch {
+      return undefined
     }
   }
 
