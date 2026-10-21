@@ -8,11 +8,18 @@
 
 import type { PanelListValue, PanelStatus, ReviewDecision, ReviewRecord, ReviewRecordSummary, ReviewRisk } from '../contract.ts'
 
-/** What the polling source last observed over the channel. */
+/**
+ * What the polling source last observed over the channel.
+ *
+ * `live` on a ready snapshot is the paging state: `true` while the source
+ * polls the newest page on its interval, `false` once `loadOlder` walked
+ * into history and paused the refresh — the deliberate trade that keeps the
+ * cursor boundary from drifting under a paging user.
+ */
 export type PanelSnapshot =
   | { readonly phase: 'loading' }
   | { readonly phase: 'failed' }
-  | { readonly phase: 'ready'; readonly value: PanelListValue }
+  | { readonly phase: 'ready'; readonly value: PanelListValue; readonly live: boolean }
 
 /** The four empty states, named by the requirement's numbering. */
 export type EmptyState = 'reviewer-unavailable' | 'not-auto' | 'channel-missing' | 'no-records'
@@ -68,21 +75,24 @@ export function reasonOf(summary: ReviewRecordSummary): string | undefined {
 /**
  * Pick the empty state, or undefined when records may render.
  *
- * Order matters: a missing channel outranks reviewer availability (nothing
- * else can be read), and a session that is not Auto outranks "no records"
- * only while the host could say so — an absent `sessionPreset` falls into
- * `no-records`, as the contract requires.
+ * Order matters since M4: records in hand outrank every availability state —
+ * persisted history renders even when the reviewer is currently absent or
+ * this session no longer runs Auto. Only a truly record-free answer falls
+ * through to the availability checks: a missing channel outranks reviewer
+ * availability (nothing else can be read), and a session that is not Auto
+ * outranks "no records" only while the host could say so — an absent
+ * `sessionPreset` falls into `no-records`, as the contract requires.
  * @param snapshot - the last channel observation.
  * @returns the empty state to show.
  */
 export function emptyStateOf(snapshot: PanelSnapshot): EmptyState | undefined {
   if (snapshot.phase === 'failed') return 'channel-missing'
   if (snapshot.phase !== 'ready') return undefined
+  if (snapshot.value.records.length > 0) return undefined
   const status: PanelStatus = snapshot.value.status
   if (!status.reviewerAvailable) return 'reviewer-unavailable'
   if (status.sessionPreset !== undefined && status.sessionPreset !== AUTO_PRESET_NAME) return 'not-auto'
-  if (snapshot.value.records.length === 0) return 'no-records'
-  return undefined
+  return 'no-records'
 }
 
 /** The two display groups: this session's correlated records, then the always-visible uncorrelated batch. */

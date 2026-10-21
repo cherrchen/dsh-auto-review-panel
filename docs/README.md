@@ -25,10 +25,13 @@ English: [README.en.md](./README.en.md)
 | --- | --- |
 | 开发需求 | [`requirements/auto-review-panel.md`](./requirements/auto-review-panel.md) |
 | 开发路径与进度总账（Plan） | [`plans/completed/2026-10-20-auto-review-panel.md`](./plans/completed/2026-10-20-auto-review-panel.md) |
+| M4 计划：审查记录持久化（已完成） | [`plans/completed/2026-10-21-m4-review-record-persistence.md`](./plans/completed/2026-10-21-m4-review-record-persistence.md) |
 | 上游 Auto Review 调研（Reference） | [`reference/upstream-auto-review.md`](./reference/upstream-auto-review.md) |
 | 兼容性代码契约（ADR-0001） | [`decisions/ADR-0001-dsh-compat-contract.md`](./decisions/ADR-0001-dsh-compat-contract.md) |
 | 上游耦合策略（ADR-0002） | [`decisions/ADR-0002-upstream-coupling-policy.md`](./decisions/ADR-0002-upstream-coupling-policy.md) |
 | 审查记录捕获接缝（ADR-0003） | [`decisions/ADR-0003-review-record-capture.md`](./decisions/ADR-0003-review-record-capture.md) |
+| 审查记录持久化（ADR-0004） | [`decisions/ADR-0004-review-record-persistence.md`](./decisions/ADR-0004-review-record-persistence.md) |
+| 历史缺失排查 | [`troubleshooting/review-history-missing.md`](./troubleshooting/review-history-missing.md) |
 
 ## 基本原则
 

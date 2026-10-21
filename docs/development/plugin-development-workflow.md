@@ -59,7 +59,7 @@ pnpm docs:check         # 文档结构检查
 | `tests/*.spec.ts` | 兼容性判定（supported/unsupported/mixed/incomplete × enforce/warn）、allowlist↔peerDependencies 一致性、patch 行不变量（id、顺序、裸包名锚点、exports 可解析）、client 制品字节形态 |
 | `smoke:compose` | 真实安装链：`dsh plugin add` + `--dump-config`，断言组合只多三行且其余逐字节相同 |
 | `smoke:packed` | 同一组合冒烟针对 `pnpm pack` 的 tarball——证明发布产物与检出等价 |
-| `smoke:live` | 真实组合验收：官方 reviewer 经 `dsh plugin add` 装入真 web profile，脚本化 adapter 定判、其余走真实管线（waterfall 顺序、Session 日志、审批服务、`PANEL_CHANNEL` HTTP + 浏览器 token 交换）；覆盖 §6 全项含三种空态 wire 证据与 headless 相位；`DSH_SMOKE_KEEP=1` 保留现场供浏览器人工抽查（`scripts/live-demo.mjs` 持进程打开同一组合） |
+| `smoke:live` | 真实组合验收：官方 reviewer 经 `dsh plugin add` 装入真 web profile，脚本化 adapter 定判、其余走真实管线（waterfall 顺序、Session 日志、审批服务、`PANEL_CHANNEL` HTTP + 浏览器 token 交换）；覆盖 §6 全项含三种空态 wire 证据、headless 相位与持久化断言（`auto-review-panel/v1/` 文件落盘、stats/settings/clear 端点经 wire、同 `$DSH_HOME` 下第二 profile 的重启恢复）；`DSH_SMOKE_KEEP=1` 保留现场供浏览器人工抽查（`scripts/live-demo.mjs` 持进程打开同一组合） |
 
 ## 5. CI 与升级车道
 

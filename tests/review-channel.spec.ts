@@ -23,7 +23,7 @@ describe('panel endpoints', () => {
   it('list returns records newest first with the status block', async () => {
     const host = makeHost()
     await capture(host)
-    const value = listValue(host.handle('list', undefined))
+    const value = listValue(await host.handle('list', undefined))
     expect(value.records.map(record => record.id)).toEqual(['review-1'])
     expect(value.status).toEqual({ reviewerAvailable: true })
   })
@@ -31,47 +31,47 @@ describe('panel endpoints', () => {
   it('list under a session filter keeps uncorrelated records and adds sessionPreset', async () => {
     const host = makeHost()
     await capture(host)
-    const value = listValue(host.handle('list', { sessionId: 'session-1' }))
+    const value = listValue(await host.handle('list', { sessionId: 'session-1' }))
     expect(value.records.map(record => record.id)).toEqual(['review-1'])
     expect(value.status).toEqual({ reviewerAvailable: true, sessionPreset: 'auto' })
   })
 
   it('list under an unknown session omits sessionPreset', async () => {
     const host = makeHost()
-    const value = listValue(host.handle('list', { sessionId: 'ghost' }))
+    const value = listValue(await host.handle('list', { sessionId: 'ghost' }))
     expect(value.status).toEqual({ reviewerAvailable: true })
   })
 
-  it('lists the live registry tools in the status, sorted and without run_code', () => {
+  it('lists the live registry tools in the status, sorted and without run_code', async () => {
     const host = makeHost({ toolNames: ['run_code', 'read', 'bash', 'read'] })
-    const value = listValue(host.handle('list', { sessionId: 'session-1' }))
+    const value = listValue(await host.handle('list', { sessionId: 'session-1' }))
     expect(value.status.tools).toEqual(['bash', 'read'])
   })
 
-  it('reports reviewerAvailable false when the Auto preset is not advertised', () => {
+  it('reports reviewerAvailable false when the Auto preset is not advertised', async () => {
     const host = makeHost({ names: ['workspace-write'] })
-    const value = listValue(host.handle('list', undefined))
+    const value = listValue(await host.handle('list', undefined))
     expect(value.status.reviewerAvailable).toBe(false)
   })
 
-  it('keeps reviewerAvailable true when the preset catalog is unreadable', () => {
+  it('keeps reviewerAvailable true when the preset catalog is unreadable', async () => {
     const names = new Proxy<readonly string[]>([], {
       get: () => {
         throw new Error('catalog unreadable')
       },
     })
     const host = makeHost({ names })
-    const value = listValue(host.handle('list', undefined))
+    const value = listValue(await host.handle('list', undefined))
     expect(value.status.reviewerAvailable).toBe(true)
   })
 
-  it('rejects a malformed list payload', () => {
+  it('rejects a malformed list payload', async () => {
     const host = makeHost()
-    expect(host.handle('list', { sessionId: 42 })).toMatchObject({
+    expect(await host.handle('list', { sessionId: 42 })).toMatchObject({
       ok: false,
       error: { code: 'panel/bad-request' },
     })
-    expect(host.handle('list', 'session-1')).toMatchObject({
+    expect(await host.handle('list', 'session-1')).toMatchObject({
       ok: false,
       error: { code: 'panel/bad-request' },
     })
@@ -80,25 +80,25 @@ describe('panel endpoints', () => {
   it('get returns the frozen record by id and fails closed on a miss', async () => {
     const host = makeHost()
     await capture(host)
-    const result = host.handle('get', { id: 'review-1' })
+    const result = await host.handle('get', { id: 'review-1' })
     expect(result).toMatchObject({ ok: true })
     const record = (result as { value: ReviewRecord }).value
     expect(record.requestText).toContain('PENDING_ACTION')
     expect(Object.isFrozen(record)).toBe(true)
 
-    expect(host.handle('get', { id: 'nope' })).toMatchObject({
+    expect(await host.handle('get', { id: 'nope' })).toMatchObject({
       ok: false,
       error: { code: 'review-record-not-found' },
     })
-    expect(host.handle('get', {})).toMatchObject({
+    expect(await host.handle('get', {})).toMatchObject({
       ok: false,
       error: { code: 'panel/bad-request' },
     })
   })
 
-  it('rejects an unknown endpoint', () => {
+  it('rejects an unknown endpoint', async () => {
     const host = makeHost()
-    expect(host.handle('purge', {})).toMatchObject({
+    expect(await host.handle('purge', {})).toMatchObject({
       ok: false,
       error: { code: 'panel/unknown-endpoint' },
     })

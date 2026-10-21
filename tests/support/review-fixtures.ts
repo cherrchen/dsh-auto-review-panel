@@ -14,6 +14,7 @@ import type { Session } from '@deepseek-ai/dsh-session'
 import type { PreToolDecision } from '@deepseek-ai/dsh-tools'
 import { ReviewCaptureHost } from '../../src/host.ts'
 import type { ReviewExecutionLike } from '../../src/host.ts'
+import type { ReviewHistory } from '../../src/history/contract.ts'
 
 /** A fixture policy with the fixed first line the fingerprint reads. */
 export const FIXTURE_POLICY = `REVIEW_POLICY
@@ -199,6 +200,8 @@ export interface HostFixtureOptions {
   readonly sessionCapacity?: number
   /** The registry names the fixture host reports; omitted leaves the status unread. */
   readonly toolNames?: readonly string[]
+  /** The optional persistence seam; omitted leaves the host memory-only. */
+  readonly history?: ReviewHistory
 }
 
 /**
@@ -208,7 +211,10 @@ export interface HostFixtureOptions {
  */
 export function makeHost(options: HostFixtureOptions = {}): ReviewCaptureHost {
   const sessions = options.sessions ?? new Map<string, unknown>([
-    ['session-1', { id: 'session-1' }],
+    ['session-1', {
+      id: 'session-1',
+      header: { createdAt: 1760000000000, isSeeded: false, cwd: '/work' },
+    }],
   ])
   return new ReviewCaptureHost({
     permissionPresets: {
@@ -230,6 +236,7 @@ export function makeHost(options: HostFixtureOptions = {}): ReviewCaptureHost {
       : { listToolNames: () => options.toolNames ?? [] }),
     ...(options.globalCapacity === undefined ? {} : { globalCapacity: options.globalCapacity }),
     ...(options.sessionCapacity === undefined ? {} : { sessionCapacity: options.sessionCapacity }),
+    ...(options.history === undefined ? {} : { history: options.history }),
   })
 }
 

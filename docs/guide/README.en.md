@@ -8,6 +8,7 @@ The user-facing guide: the top-level README covers the "how"; this guide fills i
 
 - [Why the supported matrix is an exact list](#why-the-supported-matrix-is-an-exact-list)
 - [What the composition actually does](#what-the-composition-actually-does)
+- [Where review history lives, and for how long](#where-review-history-lives-and-for-how-long)
 - [Differences between install sources](#differences-between-install-sources)
 
 ## Why the supported matrix is an exact list
@@ -17,6 +18,17 @@ Both halves of this plugin sit on seams upstream makes **no semver promise** for
 ## What the composition actually does
 
 `cordis.patch.yml` does exactly one thing: it inserts this plugin's three rows into the upstream bundle — the compatibility gate, the panel's host half, and the client-graph anchor mounted at the bare package name. It **disables nothing** upstream: the panel is an observation surface and replaces no existing capability. What each row is for — and why the bare-name row cannot be skipped — is covered by [troubleshooting](../troubleshooting/client-bundle-not-in-boot-graph.md) and `tests/patch.spec.ts`.
+
+## Where review history lives, and for how long
+
+Every review the panel captures — full request text, the four parsed sections, reasoning, verdict, and `hostOutcome` evidence — is persisted as **plaintext JSONL** under `<DSH_HOME>/auto-review-panel/v1/` (`~/.dsh/auto-review-panel/v1/` by default, overridable via the `$DSH_HOME` environment variable). The directory is `0700`, files `0600`; the UI shows the location in symbolic form (`~/.dsh/…` / `$DSH_HOME/…`).
+
+- **Survives restarts**: history is restored per session — open a session under the same `$DSH_HOME` and its records are listed again, even if Auto Review has been disabled or the session no longer runs the Auto preset (records in hand beat every empty state).
+- **Uncorrelated records stay globally visible**: calls the upstream reviewer stops with `deny + never` never reach session correlation; those records — the riskiest batch — land in `unassigned.jsonl` and appear in every session view.
+- **Unlimited by default**: the three retention axes — records per session / sessions kept / total megabytes — all ship as `0` = unlimited. To tighten: plugin manager → this plugin's row → `auto-review-panel` Configure page; saving applies immediately and runs one maintenance pass (compaction, oldest-session eviction, total-size trimming).
+- **Clearing**: "Clear all history" at the bottom of the same page (behind a confirmation dialog) removes every history file plus the in-memory records; retention settings are kept. Losing history never breaks the plugin — persistence is a pure side channel and no write failure can change a review or a tool execution.
+- **Privacy boundary**: the on-disk content includes the complete request text and reasoning sent to the reviewer — plaintext, not encrypted, never uploaded. Treat it as a local sensitive file on shared machines; if you cannot keep it, set "records per session" low or keep the axes at `0` and clear periodically (there is no "persistence off" switch — the panel reads history through the same path).
+- **No cross-session browser**: the session-less view shows only the current process's in-memory records — per-session restore is a deliberate boundary (see [ADR-0004](../decisions/ADR-0004-review-record-persistence.md)).
 
 ## Differences between install sources
 

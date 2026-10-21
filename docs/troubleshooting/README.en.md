@@ -21,6 +21,7 @@ Only issues that are expected to recur and are costly to diagnose are worth reco
 
 - [The client bundle never enters the web boot graph: the bundle patch only mounts subpath rows](./client-bundle-not-in-boot-graph.md) — root cause and fix for a silently missing sidebar slot registration.
 - [The DSH release is not on the support matrix](./unsupported-dsh-release.md) — the `unsupported` / `mixed` / `incomplete` verdicts, why plugin rows do not start, and the manual promotion flow for a new release.
+- [Review history is not persisting / records are gone after a restart](./review-history-missing.md) — persistence unavailable, stale/corrupt/foreign files, reused session identities, mistaken retention limits, and an empty list after a clear: symptoms, diagnostics, and verified fixes.
 
 ## Naming Convention
 

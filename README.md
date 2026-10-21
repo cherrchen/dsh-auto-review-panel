@@ -13,10 +13,11 @@ DSH（DeepSeek Harness）的 Auto 权限预设由 Auto Review 审查器在后台
 本插件是一个不修改上游任何代码的外部扩展，给 Auto Review 装上**一块看得见的面板**：把审查器的判定、风险等级与依据呈现在侧栏里，让"这次调用为什么被放行/拒绝"不再是一个只能从会话消息里猜的黑盒。
 
 - **只读呈现，不改裁决**：面板是审查状态的一个 UI/传输面，不是第二个审查器。授权策略、风险分级与来源分类完全由官方 Auto Review 负责（语义见[上游调研](./docs/reference/upstream-auto-review.md)），本插件不裁决、不拦截、不重算任何调用——审查内容经 `llm/stream` 的只读观察接缝捕获——指纹匹配不上即不记录，绝不误报（[ADR-0003](./docs/decisions/ADR-0003-review-record-capture.md)）。
+- **历史按会话持久化**：审查记录落盘到 `<DSH_HOME>/auto-review-panel/v1/`（默认 `~/.dsh/auto-review-panel/v1/`），`dsh` 重启后按会话恢复；Auto Review 已停用、或会话不再用 Auto preset 时历史照常展示；未关联记录（上游 `deny+never` 拦截的批次）在任何会话视图恒可见。默认不限量，留存上限与清理入口在插件管理页本插件条目的配置页（见[用户指南](./docs/guide/README.md#审查历史存在哪里存多久)与 [ADR-0004](./docs/decisions/ADR-0004-review-record-persistence.md)）。
 - **host/client 分半**：宿主半部承载审查状态的读取通道，浏览器半部把它渲染进侧栏；两半之间走 DSH 的 Connection 通道，不私开 HTTP 面。
 - **不配等于没装**：宿主 DSH 版本不在支持清单上、或核心包混装时，插件行不启动，组合退化为"没装这个插件"——这是刻意的 fail-closed，见 [ADR-0001](./docs/decisions/ADR-0001-dsh-compat-contract.md)。
 
-首个版本 `v0.1.0` 已就绪：审查记录捕获、宿主结局佐证与 `sidebar.right` 面板均已落地，并在真实组合上经 `pnpm smoke:live` 对照官方 `@deepseek-ai/dsh-experimental-auto-review@0.2.1-rc.2`（npm `next`）验收。进度与发布状态见[路线图 §进度总账](./docs/plans/completed/2026-10-20-auto-review-panel.md#进度总账)。
+首个版本 `v0.1.0` 已就绪：审查记录捕获、宿主结局佐证、`sidebar.right` 面板与按会话持久化均已落地，并在真实组合上经 `pnpm smoke:live` 对照官方 `@deepseek-ai/dsh-experimental-auto-review@0.2.1-rc.2`（npm `next`）验收（含落盘与重启恢复）。进度与发布状态见[路线图 §进度总账](./docs/plans/completed/2026-10-20-auto-review-panel.md#进度总账)。
 
 ## 环境要求
 
@@ -95,9 +96,10 @@ dsh --profile web --dump-config | grep -A3 'auto-review-panel'
 │   ├── host.ts                      捕获核心：在飞关联、宿主结局佐证、通道端点体
 │   ├── channel.ts                   PANEL_CHANNEL 挂载（connection.rpc.handle，软接缝）
 │   ├── records.ts                   双环形记录缓冲与列表投影
+│   ├── history/                     按会话 JSONL 持久化（contract/format/paths/store/lazy）
 │   ├── contract.ts                  host/client 共享 wire 契约
 │   ├── panel.ts                     面板的宿主半部：autoReviewPanel 服务行
-│   ├── client/                      浏览器半部：面板组件、轮询数据源、文案与样式
+│   ├── client/                      浏览器半部：面板组件、轮询数据源、留存设置页、文案与样式
 │   └── index.ts                     公共面 barrel；其空 apply 同时承载裸包名的 client 图锚点行
 ├── tests/                           宿主捕获/缓冲/通道、兼容性判定、patch 不变量、client 面板与制品形态
 ├── scripts/                         冒烟（compose / packed / live）、兼容性契约检查、打包门禁、升级流程、lefthook 安装器
@@ -116,7 +118,8 @@ dsh --profile web --dump-config | grep -A3 'auto-review-panel'
 
 ## 已知限制
 
-- 记录只活在内存里：不跨进程持久化，会话重启后面板清空；未关联记录（没有 `correlation.callId` 锚）如实显示在「未关联」组、无宿主结局佐证。
+- 记录以**明文** JSONL 落盘在 `<DSH_HOME>/auto-review-panel/v1/`：含审查请求全文与推理原文，不加密、不上传——共享机器请按本地敏感文件对待；没有"关闭持久化"开关（面板的读路径经同一存储）。
+- 不做跨会话历史浏览：无会话视图只显示当前进程内存里的记录；未关联记录（没有 `correlation.callId` 锚）如实显示在「未关联」组、无宿主结局佐证。
 - 支持矩阵是精确版本 allowlist：宿主版本不在清单上、或核心包混装了不同版本时，被门禁的 `auto-review-panel` 行**不启动**，组合退化为"没装这个插件"（[ADR-0001](./docs/decisions/ADR-0001-dsh-compat-contract.md)）。
 - 官方 Auto Review 不提供专用的面板数据源接口：审查判定与原因需要从宿主侧的既有接缝读取，上游一旦改变这些接缝的形状，只能由适配层或升级车道发现——本插件不承诺跨版本的语义直通（[上游调研](./docs/reference/upstream-auto-review.md)）。
 

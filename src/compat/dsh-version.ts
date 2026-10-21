@@ -57,8 +57,10 @@ export const REQUIRED_CORE_PACKAGES = [
 export const OPTIONAL_CORE_PACKAGES = [
   '@deepseek-ai/dsh-agent',
   '@deepseek-ai/dsh-agent-instructions',
+  '@deepseek-ai/dsh-atomic-write',
   '@deepseek-ai/dsh-client-connection',
   '@deepseek-ai/dsh-commands',
+  '@deepseek-ai/dsh-home-paths',
   '@deepseek-ai/dsh-llm',
   '@deepseek-ai/dsh-util-values',
 ] as const
@@ -70,13 +72,15 @@ export const OPTIONAL_CORE_PACKAGES = [
  * private copy inside this package's own tree genuinely loads, and a version
  * that disagrees with the host is a real mixed installation, not a phantom.
  *
- * The bucket is currently empty on purpose: every optional peer, `dsh-llm`
- * included, is consumed only as a mounted host service or ambient types, so
- * all of them live in {@link HOST_SERVICE_PACKAGES}. The list stays because
- * the day a peer is genuinely imported at run time it must move here — a
- * private copy of such a package DOES execute and must testify.
+ * M4's persistence bypass loads `dsh-home-paths` and `dsh-atomic-write`
+ * through dynamic `import()`s inside `src/history/paths.ts` — exactly the
+ * case this bucket exists for: a private copy inside this package's own tree
+ * would genuinely run, so it must testify to its version like a required
+ * package does.
  */
 export const RUNTIME_OPTIONAL_PACKAGES = [
+  '@deepseek-ai/dsh-atomic-write',
+  '@deepseek-ai/dsh-home-paths',
 ] as const
 
 /**

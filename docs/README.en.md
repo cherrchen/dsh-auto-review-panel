@@ -25,10 +25,13 @@ The project currently focuses on the DSH Auto Review Panel plugin under one hard
 | --- | --- |
 | Requirements | [`requirements/auto-review-panel.md`](./requirements/auto-review-panel.md) |
 | Development path and progress ledger (plan) | [`plans/completed/2026-10-20-auto-review-panel.md`](./plans/completed/2026-10-20-auto-review-panel.md) |
+| M4 plan: review-record persistence (complete) | [`plans/completed/2026-10-21-m4-review-record-persistence.md`](./plans/completed/2026-10-21-m4-review-record-persistence.md) |
 | Upstream Auto Review survey (reference) | [`reference/upstream-auto-review.md`](./reference/upstream-auto-review.md) |
 | Compatibility code contract (ADR-0001) | [`decisions/ADR-0001-dsh-compat-contract.md`](./decisions/ADR-0001-dsh-compat-contract.md) |
 | Upstream coupling policy (ADR-0002) | [`decisions/ADR-0002-upstream-coupling-policy.md`](./decisions/ADR-0002-upstream-coupling-policy.md) |
 | Review-record capture seam (ADR-0003) | [`decisions/ADR-0003-review-record-capture.md`](./decisions/ADR-0003-review-record-capture.md) |
+| Review-record persistence (ADR-0004) | [`decisions/ADR-0004-review-record-persistence.md`](./decisions/ADR-0004-review-record-persistence.md) |
+| Missing-history troubleshooting | [`troubleshooting/review-history-missing.md`](./troubleshooting/review-history-missing.md) |
 
 ## Core Principles
 

@@ -18,7 +18,7 @@
  * @module scripts/smoke-live
  */
 
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createChecker } from './lib/check.mjs'
@@ -338,9 +338,77 @@ try {
       otherRecords.filter(record => record.correlated === true).length, 0,
       'a foreign session sees no correlated records',
     )
+
+    // --- M4: durable history over the wire and on disk ---
+    const stats = await panelCall(origin, cookie, 'stats', {})
+    check.equal(stats?.value?.available, true, 'stats reports persistence available', JSON.stringify(stats?.value))
+    check.ok(
+      typeof stats?.value?.location === 'string'
+        && (stats.value.location.startsWith('$DSH_HOME/') || stats.value.location.startsWith('~/'))
+        && !stats.value.location.includes(home),
+      'stats.location is the symbolic home spelling, never the machine path',
+      String(stats?.value?.location),
+    )
+    check.ok((stats?.value?.sessions ?? 0) >= 1, 'stats counts the session file', String(stats?.value?.sessions))
+    check.ok((stats?.value?.bytes ?? 0) > 0, 'stats counts persisted bytes', String(stats?.value?.bytes))
+
+    const listPage = await panelCall(origin, cookie, 'list', { sessionId: 'live-1', limit: 2 })
+    check.equal(listPage?.value?.records?.length, 2, 'list honours the page limit', String(listPage?.value?.records?.length))
+    check.equal(listPage?.value?.page?.hasMore, true, 'a full page advertises the older cursor')
+    const older = await panelCall(origin, cookie, 'list', { sessionId: 'live-1', limit: 2, before: listPage?.value?.page?.before })
+    check.equal(older?.value?.records?.length, 2, 'the before cursor returns the next strictly-older page')
+    check.ok(
+      new Set([...(listPage?.value?.records ?? []), ...(older?.value?.records ?? [])].map(record => record.id)).size === 4,
+      'paged rows never repeat an id',
+    )
+
+    const badSettings = await panelCall(origin, cookie, 'update-settings', { retention: { maxRecordsPerSession: -1, maxSessions: 0, maxTotalMegabytes: 0 } })
+    check.equal(badSettings?.error?.code, 'panel/bad-request', 'update-settings rejects a negative retention axis')
+    const saved = await panelCall(origin, cookie, 'update-settings', { retention: { maxRecordsPerSession: 500, maxSessions: 0, maxTotalMegabytes: 0 } })
+    check.equal(saved?.value?.stats?.settings?.maxRecordsPerSession, 500, 'update-settings persists the new retention', JSON.stringify(saved?.error))
+    const badClear = await panelCall(origin, cookie, 'clear', {})
+    check.equal(badClear?.error?.code, 'panel/bad-request', 'clear requires { confirm: true }')
+
+    // The files the endpoints describe actually exist under the scratch home.
+    const historyRoot = join(home, 'auto-review-panel', 'v1')
+    const sessionFiles = existsSync(join(historyRoot, 'sessions'))
+      ? readdirSync(join(historyRoot, 'sessions')).filter(name => name.endsWith('.jsonl'))
+      : []
+    check.ok(
+      sessionFiles.length >= 1,
+      'a per-session history file exists under $DSH_HOME/auto-review-panel/v1/sessions/ (keyed by encoded session id)',
+      sessionFiles.join(','),
+    )
+    check.ok(existsSync(join(historyRoot, 'unassigned.jsonl')), 'the unassigned log exists')
+    check.ok(existsSync(join(historyRoot, 'settings.json')), 'settings.json persisted the retention write')
   } finally {
     await ctx.fiber.dispose()
   }
+
+  // The flush barrier ran at dispose: the session file must hold every
+  // reviewed call's record plus the correlation/hostOutcome patch lines.
+  const disposedDir = join(home, 'auto-review-panel', 'v1', 'sessions')
+  const disposedFiles = existsSync(disposedDir)
+    ? readdirSync(disposedDir).filter(name => name.endsWith('.jsonl'))
+    : []
+  const liveOneFile = disposedFiles.length === 1 ? join(disposedDir, disposedFiles[0]) : undefined
+  check.ok(liveOneFile !== undefined, 'exactly one session history file survived dispose', disposedFiles.join(','))
+  const liveOneText = liveOneFile === undefined ? '' : readFileSync(liveOneFile, 'utf8')
+  const liveOneLines = liveOneText.trim().split('\n').filter(line => line !== '')
+  check.equal(
+    liveOneLines.filter(line => line.includes('"type":"record"')).length, 5,
+    'live-1 history file holds all five correlated records',
+    String(liveOneLines.length),
+  )
+  check.ok(
+    liveOneText.includes('"type":"patch"') && liveOneText.includes('"hostOutcome"'),
+    'host-outcome evidence landed as patch lines',
+  )
+  const unassignedText = readFileSync(join(home, 'auto-review-panel', 'v1', 'unassigned.jsonl'), 'utf8')
+  check.ok(
+    unassignedText.includes('"type":"record"'),
+    'the orphaned record survives in unassigned.jsonl',
+  )
 
   // --- Phase 2: empty state ① — a real web profile without the reviewer ---
   const prepareProfile = (name, dir, cmdArgs) => async (host, { installAnchor }) => {
@@ -369,6 +437,23 @@ try {
     const plainCookie = (plainLogin.headers.get('set-cookie') ?? '').split(';', 1)[0] ?? ''
     const plainList = await panelCall(plainOrigin, plainCookie, 'list', {})
     check.equal(plainList?.value?.status?.reviewerAvailable, false, 'empty state ①: status reports the reviewer absent')
+    // M4 restoration: this profile never saw session live-1 and mounts no
+    // reviewer, yet the persisted session file still answers — restart-safe,
+    // reviewer-independent history is the milestone's headline behavior.
+    const restored = await panelCall(plainOrigin, plainCookie, 'list', { sessionId: 'live-1' })
+    const restoredIds = (restored?.value?.records ?? []).map(record => record.id)
+    check.equal(
+      restoredIds.length, 6,
+      'records persist across a restart and stay readable without the reviewer (5 correlated + the always-visible uncorrelated orphan)',
+      JSON.stringify(restoredIds),
+    )
+    const restoredFull = restoredIds.length > 0
+      ? (await panelCall(plainOrigin, plainCookie, 'get', { id: restoredIds[0], sessionId: 'live-1' }))?.value
+      : undefined
+    check.ok(
+      restoredFull?.output !== undefined && restoredFull?.requestText !== undefined,
+      'a restored record still carries the complete review artifact',
+    )
   } finally {
     await plainBoot.ctx.fiber.dispose()
   }

@@ -10,7 +10,8 @@
 | 初始化 | bundle 骨架（compat/panel/client-anchor 三行）、兼容性契约、host/client 构建、tests、组合冒烟、打包门禁、lefthook、CI/release/upgrade/diag 工作流、docs 体系、双语 README/CHANGELOG | 完成（2026-10-20） | 未发版（`v0.0.0`） |
 | M1 | 审查记录捕获（宿主半部）：`llm/stream` 只读 tee + 结构指纹 + `pre-execute` 关联锚（`downstreamDecision`）+ 环形缓冲 + `PANEL_CHANNEL` list/get 端点 | 完成（2026-10-20） | — |
 | M2 | sidebar.right 面板（客户端半部）：tab 类型注册 + `sidebar.right.pane.tab` 面板体、列表/详情、四种空态、双语 | 完成（2026-10-20） | — |
-| M3 | 打磨与首发：关联/结局佐证增强、缓冲实测调参、真实组合验收、演示 GIF、首版发版 | **已完成**（2026-11-24） | `v0.1.0` |
+| M3 | 打磨与首发：关联/结局佐证增强、缓冲实测调参、真实组合验收、演示 GIF、首版发版 | **已完成**（2026-10-21） | `v0.1.0` |
+| M4 | 审查记录按会话持久化：per-session JSONL 日志（`DSH_HOME/auto-review-panel/v1/`）、留存设置页（`plugins.row.config`）、分页；重启后历史按会话恢复 | **已完成**（2026-10-21） | 随 `v0.1.0` |
 
 ### 初始化（2026-10-20）
 
@@ -59,7 +60,7 @@
 
 **如实边界**：轨迹定位整体撤销——0.2.1-rc.2 下可见 tab 切换与 call 级 focus 都走 `conversation.session` 私有 inject 面的 store actions，公开服务面没有写口；持久化偏好与 DOM 手势两条绕路要么只对重挂载生效、要么依赖私有 DOM 契约，均达不到"点击即达"的真实效果。按"无可靠接缝宁可不提供"原则，`inspectCall`/`navigation.ts` 及其 inject（`uiSession`/`uiConversation`/sessions 绑定、`uiWorkspace`/`configForms` 可选读）整体移除，不再提供该按钮。
 
-## M3：打磨与首发（已完成，2026-11-24）
+## M3：打磨与首发（已完成，2026-10-21）
 
 - 宿主处置佐证已落地：`correlation.denialInfo`（上游 `deny` 的 `info` 逐字，实测拿到 `AutoReviewDeniedError`/`AUTO_REVIEW_DENIED`）+ `hostOutcome`（`tool/result` 结局与 `approval/asked`/`approval/decided` 审批审计对，经 `session/event` 观察；仅 `correlation.callId` 已知的记录可获佐证，事件早到时暂存待 `correlate()` 并入）。`ask` 转人工以"宿主结局"行呈现在详情概览——`ask` 仍不是 reviewer decision，不进裁决 chip。
 - prepend 关联机制经真实组合**实测采纳**：cordis prepend 是"最后注册者最先"，而上游在自己挂载期的 `ctx.effect` 里注册——本插件延迟一个 macrotask 的 prepend 实测落在其前，`deny+never` 由此获得 `correlation` 与 `AUTO_REVIEW_DENIED`；顺序不利时如实退回未关联（顺序非公开契约，机制与退路见架构文档 §3.1）。
@@ -67,6 +68,19 @@
 - 真实组合端到端验收通过：`pnpm smoke:live` 49/49（官方 `@deepseek-ai/dsh-experimental-auto-review@0.2.1-rc.2` 自 npm `next` 经真实 `dsh plugin add` 装入真 web profile，脚本化 adapter 定判、其余全走真实管线：真 waterfall 顺序、真 Session 日志、真审批服务、真 `PANEL_CHANNEL` HTTP + 浏览器 token 交换）。覆盖：allow 记录逐字、deny+ask（`downstreamDecision:'ask'` + approval outcome）、deny+never（关联 + `AUTO_REVIEW_DENIED` 双佐证）、malformed→`decision:error`、reviewer 断流→`finish:error`、下游 listener 炸掉的孤儿记录如实未关联且在外会话过滤下恒可见、空态①（无 reviewer 的 web profile）②（非 Auto 会话）④（Auto 零记录）经 wire 实测、headless 组合不挂通道宿主不炸。
 - **验收口径说明**：脚本化 adapter 只决定 reviewer 裁决内容，捕获/关联/佐证/通道全走正式管线；同会话与跨会话的并发 exec 经实测被工具调度器串行化，歧义路径（双同形在飞）在真实组合中无法确定复现，由单测覆盖；空态③（通道缺席）由单测与 headless 相位（无 connection）覆盖。
 - 首版 `v0.1.0`：`pnpm release 0.1.0` 已写版本号；CHANGELOG 双语条目已收拢（tag 推送即发布，见发版流程）。
+
+## M4：审查记录按会话持久化（已完成，2026-10-21）
+
+> 计划文档：[2026-10-21-m4-review-record-persistence.md](./2026-10-21-m4-review-record-persistence.md)；决策见 [ADR-0004](../../decisions/ADR-0004-review-record-persistence.md)；行为契约见需求 §4.4 与架构 §2.1。
+
+- **布局与格式**：`<DSH_HOME>/auto-review-panel/v1/` 下 `sessions/<key>.jsonl`（`header` + `record`/`patch` 行）+ `unassigned.jsonl`（未关联记录全局集合，`delete` 行移除已关联项）+ `settings.json`（留存设置，`clear` 不删）；目录 `0700`、文件 `0600`；损坏/过期文件改名 `.corrupt-<stamp>`/`.stale-<stamp>` 保留字节，外来 schema 标记 foreign 不覆写。
+- **写路径**：捕获先入 unassigned；`correlate()` 先写会话文件再 tombstone unassigned（崩溃窗口只允许重复，不允许只有 tombstone 没有正文）；`attachHostOutcome()` 落 `patch` 行。每文件一条 promise 链串行化；`session/flush` 事件排空屏障；`ctx.effect` 里 `close()`。
+- **会话身份**：文件 header 携 `Session.header` 的 `{createdAt, cwd, isSeeded}`；live 会话逐字段不符 → 文件视为旧生命周期改名 aside；冷会话信任文件——sessionId 复用不会把新记录归到旧会话。
+- **动态依赖**：`@deepseek-ai/dsh-atomic-write`（temp+rename、`withFileLock`）与 `@deepseek-ai/dsh-home-paths`（`resolveDshHome`/`dshHomeDisplay`）均动态导入、缺席合法退化（进程内串行 + `rename`；`$DSH_HOME` 展开 + `~/.dsh` 兜底）——两包入 `RUNTIME_OPTIONAL_PACKAGES` 而非 peer。
+- **端点**：通道扩到五个——`list`（`before`/`limit` 键集分页，默认 200 上限 500）、`get`（内存未命中落盘回查）、`stats`（`available:false` 退化、符号化 `location`）、`update-settings`（非负整数、`0`=不限、`bad-request`/`persistence-unavailable` 语义）、`clear`（`confirm:true` 门闩，删历史文件+内存缓冲、留 `settings.json`）。sessionId 缺席的 `list` 只回内存——无跨会话浏览（ADR-0004 边界）。
+- **客户端**：列表 `loadOlder` 分页状态机（`first`/`older`/`olderPage`/`live` + epoch 防 refresh↔loadOlder 竞态），翻页暂停轮询并显示提示、刷新恢复；空态优先级「有记录 > reviewer 缺席 > 非 Auto > 在线无记录」（持久化历史压过①②④）；tool 筛选项并入已加载记录的 `action.name`；插件管理页 `plugins.row.config`（键 `@dsh-electron/dsh-auto-review-panel#auto-review-panel`）贡献 `view:'page'` 留存设置页——三轴编辑、位置/用量、重置、Modal 确认清理；plugin-manager 缺席时软跳过。
+- **如实边界**：硬杀最多丢最后一个 flush 屏障前的写窗口；单文件自身超总量上限保留并回报 warning 不截断；外国 schema 文件永不覆写——未来升级格式需读侧先懂；无"关闭持久化"开关（面板读历史走同一路径）。
+- **验证**：`vitest run` 9 文件 172 通过 1 跳过（`review-history.spec.ts` 24 项：JSONL 往返、header 身份校验、stale/corrupt/foreign 处理、unassigned tombstone 与压实、留存三轴、clear/flush/close、分页游标稳定性；`review-channel.spec.ts` 扩到 stats/update-settings/clear 与分页形状；`source.spec.ts` 分页状态机与竞态；`client-panel.spec.tsx` loadOlder/footer/暂停提示；`client-bundle.spec.ts` plugin-manager 注入声明；`compat.spec.ts` runtime-optional 分区）。`smoke:live` 实测持久化断言：文件落盘、stats/settings 端点经 wire、清理生效、**重启恢复**（同 `$DSH_HOME` 的 plain profile——无 reviewer——仍能列出完整历史含未关联组）。`pnpm verify:all` + `compat:check` + `docs:check` 全绿。
 
 ## 里程碑纪律
 

@@ -81,6 +81,7 @@ function listValue(overrides: Partial<PanelListValue> = {}): PanelListValue {
       reviewerPackage: '@deepseek-ai/dsh-experimental-auto-review',
       tools: ['bash', 'glob', 'read', 'write'],
     },
+    page: { hasMore: false },
     ...overrides,
   }
 }
@@ -176,6 +177,7 @@ function renderPane(harness: ReturnType<typeof mount>, sessionId: SessionId = SE
       useRecords: (selector: (value: unknown) => unknown) => selector(snapshot),
       getRecord: face['getRecord'],
       refresh: face['refresh'],
+      loadOlder: face['loadOlder'],
       t: harness.dict,
     })
   }
@@ -201,6 +203,20 @@ describe('two-stage mount', () => {
       key: '@dsh-electron/dsh-auto-review-panel',
       locale: 'auto-review-panel',
     })
+  })
+
+  it('registers the row configuration entry under its `<package>#<row>` key', () => {
+    const harness = mount()
+    const settings = harness.registrations.find(entry => entry.options.name === 'plugins.row.config')
+    expect(settings?.options).toMatchObject({
+      name: 'plugins.row.config',
+      key: '@dsh-electron/dsh-auto-review-panel#auto-review-panel',
+      locale: 'auto-review-panel',
+    })
+    // The summary view answers with the localized one-liner, no channel needed.
+    const face = settings?.options.inject?.(SESSION)
+    const node = settings?.component({ view: 'summary', ...(face ?? {}), t: harness.dict })
+    expect(node).toBe(zh['settings.summary'])
   })
 
   it('mounts About and refresh as icon buttons at the header right', async () => {
@@ -380,7 +396,7 @@ describe('the detail view', () => {
   it('fetches the record and shows the overview card plus the tab switcher', async () => {
     const harness = mount()
     const { container } = await openDetail(harness)
-    expect(harness.calls.find(call => call.endpoint === 'get')?.payload).toEqual({ id: 'r1' })
+    expect(harness.calls.find(call => call.endpoint === 'get')?.payload).toEqual({ id: 'r1', sessionId: 'session-1' })
     const overview = container.querySelector('.arp-overview')!
     expect(overview.textContent).toContain('deepseek/deepseek-chat')
     expect(overview.textContent).toContain('2026-10-20T12:00:00.000Z')

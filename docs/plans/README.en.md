@@ -36,11 +36,14 @@ Plans with long-term reference value should not be deleted.
 
 ## Current State
 
-active: none yet.
+active:
+
+- (none)
 
 completed:
 
-- [2026-10-20-auto-review-panel.md](./completed/2026-10-20-auto-review-panel.md) — the Auto Review Panel development path and **progress ledger**: initialization, M1 review-record capture, M2 panel, and M3 polish & first release — all complete, shipping with `v0.1.0`.
+- [2026-10-20-auto-review-panel.md](./completed/2026-10-20-auto-review-panel.md) — the Auto Review Panel development path and **progress ledger**: initialization, M1 review-record capture, M2 panel, M3 polish & first release, and M4 persistence — all complete, shipping with `v0.1.0`.
+- [2026-10-21-m4-review-record-persistence.md](./completed/2026-10-21-m4-review-record-persistence.md) — M4: per-session review-record persistence (per-session JSONL + retention settings page + pagination), complete, shipping with `v0.1.0`.
 
 ### Numbering
 

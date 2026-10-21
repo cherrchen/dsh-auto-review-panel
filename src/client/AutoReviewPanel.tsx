@@ -60,8 +60,10 @@ export interface PanelInjected {
   }
   /** One-shot `get`; undefined for an evicted record. */
   readonly getRecord: (id: string, signal?: AbortSignal) => Promise<ReviewRecord | undefined>
-  /** Out-of-interval poll for the toolbar. */
+  /** Out-of-interval poll for the toolbar; also exits the paused paging state. */
   readonly refresh: () => void
+  /** Append the next strictly-older history page and pause auto-refresh. */
+  readonly loadOlder: () => void
 }
 
 /** Composed props the slot framework hands this component. */
@@ -418,7 +420,7 @@ function About({ open, policy, reviewer, onClose, t }: {
 
 /** The session-bound panel body. */
 export function AutoReviewPanel(props: AutoReviewPanelProps): ReactNode {
-  const { useRecords, getRecord, refresh, t } = props
+  const { useRecords, getRecord, refresh, loadOlder, t } = props
   const snapshot = useRecords(current => current)
   const [filters, setFilters] = useState<ListFilters>({})
   const [selectedId, setSelectedId] = useState<string | undefined>()
@@ -479,10 +481,15 @@ export function AutoReviewPanel(props: AutoReviewPanelProps): ReactNode {
   const state = emptyStateOf(snapshot)
   const groups = snapshot.phase === 'ready' ? groupSummaries(snapshot.value.records, filters) : undefined
   const status = snapshot.phase === 'ready' ? snapshot.value.status : undefined
-  // Options are the host's live registry list, not the captured records, plus
-  // any still-selected value so a tool that left the registry stays clearable.
+  // Options are the host's live registry list plus every tool name the
+  // loaded records actually carry — a restarted panel has history to filter
+  // long before it has a registry answer — plus any still-selected value so
+  // a tool that left the registry stays clearable.
   const registryTools = snapshot.phase === 'ready' ? snapshot.value.status.tools ?? [] : []
-  const tools = [...new Set([...registryTools, ...(filters.tool ?? [])])]
+  const recordTools = snapshot.phase === 'ready'
+    ? snapshot.value.records.flatMap(record => record.action.name === undefined ? [] : [record.action.name])
+    : []
+  const tools = [...new Set([...registryTools, ...recordTools, ...(filters.tool ?? [])])]
     .sort((left, right) => left.localeCompare(right))
 
   return e('div', { className: 'arp-panel' },
@@ -584,5 +591,21 @@ export function AutoReviewPanel(props: AutoReviewPanelProps): ReactNode {
                 e('div', { className: 'arp-group-title' }, t('group.uncorrelated')),
                 groups.uncorrelated.map(record =>
                   e(RecordRow, { key: record.id, record, onOpen: openRecord, t })))
+            : null,
+          // History paging footer: `hasMore` offers the next older page; a
+          // paused source (live === false) explains why the list no longer
+          // auto-refreshes and how to return to the newest page.
+          snapshot.phase === 'ready' && (snapshot.value.page.hasMore || !snapshot.live)
+            ? e('div', { className: 'arp-list-footer' },
+                snapshot.live ? null
+                  : e('div', { className: 'arp-paused' }, t('list.paused')),
+                snapshot.value.page.hasMore
+                  ? e(Button, {
+                      variant: 'outline',
+                      size: 'sm',
+                      className: 'arp-load-older',
+                      onClick: () => loadOlder(),
+                    }, t('list.loadOlder'))
+                  : null)
             : null))
 }

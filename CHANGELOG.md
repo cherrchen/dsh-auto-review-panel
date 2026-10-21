@@ -17,4 +17,6 @@ English: [CHANGELOG.en.md](./CHANGELOG.en.md)
 - 审查记录捕获（M1）：`llm/stream` 只读 tee + 结构指纹识别官方 Auto Review 的审查流；记录保留审查请求全文（`requestText`/`sections` 逐字）、reasoning 原文、裁决输出（`risk`/`decision`/`reason`/`rawText`）与 `finish` 异常；`tools/pre-execute` 在飞表按 PENDING_ACTION 精确回填 `correlation{sessionId, callId, downstreamDecision, denialInfo?}`，歧义宁可不关联；双环形缓冲（每会话 50 / 全局 200，实测复核保留）。
 - 宿主结局佐证（M3）：`session/event` 观察 `tool/result` 与 `approval/asked`/`approval/decided`，向已关联记录回填 `hostOutcome{toolResult?, approval?}`——`deny+never` 的 `AUTO_REVIEW_DENIED` 在裁决层与日志层双重佐证，`deny+ask` 的人工审批结局如实呈现；无 callId 锚的记录永不佐证。
 - 面板 UI（M2/M3）：`sidebar.right` 新增「自动审查」面板——列表（工具名+mode · risk/裁决标签 · 参数预览 · 依据+时间，分「当前会话/未关联」两组，risk/decision 筛选）+ 详情（概览卡 + `工具调用`/`审查上下文`/`项目环境`/`审查结果` 四 tab，`JsonTree` 呈现原文）；四种空态如实区分（reviewer 未启用 / 非 Auto 会话 / 通道缺席 / 尚无记录）；zh/en 双语。
-- 验收：`pnpm smoke:live` 以官方 `@deepseek-ai/dsh-experimental-auto-review@0.2.1-rc.2`（npm `next`）在真实组合 web/headless profile 上跑通 §6 全项（49 项断言）。
+- 审查记录持久化（M4）：完整审查产物——请求全文、四节解析结构、推理、裁决、关联与宿主佐证——以 append-only JSONL 落盘于 `<DSH_HOME>/auto-review-panel/v1/`（每会话一份 `sessions/*.jsonl` + 全局 `unassigned.jsonl`），`dsh` 重启后按会话恢复，Auto Review 停用或会话离开 Auto preset 后历史照常展示；写入经原子写与文件锁（上游包缺席时自动退化），`session/flush` 作持久化屏障；任何存储失败都不会影响捕获、工具执行或裁决。
+- 留存与清理（M4）：插件管理页本插件条目的 `auto-review-panel` 配置页提供三个留存轴（每会话记录数 / 保留会话数 / 总大小 MB，默认全 `0` = 不限）与经确认的「清理全部历史」；面板列表支持「加载更早」键集分页，翻页期间暂停自动刷新。
+- 验收：`pnpm smoke:live` 以官方 `@deepseek-ai/dsh-experimental-auto-review@0.2.1-rc.2`（npm `next`）在真实组合 web/headless profile 上跑通 §6 全项，含落盘文件、stats/settings 端点与重启恢复断言。
