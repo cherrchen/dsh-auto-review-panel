@@ -36,7 +36,7 @@ PANEL_CHANNEL（connection.rpc.handle）
    get(id, sessionId?) → 完整 ReviewRecord
    stats() / update-settings({retention}) / clear({confirm:true})
    ▼
-M2 客户端面板（sidebar.right tab）+ 插件管理行配置页（留存/清理）
+M2 客户端面板（sidebar.right tab）+ 插件管理包配置页（留存/清理）
 ```
 
 三条不变式贯穿全链路：
@@ -158,7 +158,7 @@ listener 顺序不是公开契约：如果某个纤维比我们更晚 prepend，
 **呈现纪律**：控件全部来自 `@deepseek-ai/dsh-client-ui-primitives`（Button/Tag/Menu/DisclosureRow/JsonTree/Modal/TextShimmer + 图标，seeded 模块表词、bundle 外部引用），自有 CSS 只负责布局与行排版；列表行至多三行、行间无分割线：第一行左侧 = 工具名 + mode 徽标，右侧 = risk 标签 + 裁决 chip 两个着色 Tag；第二行 = `preview` 参数预览独占一行；第三行 = 依据行，最右端时间。分"当前会话/未关联"两组（host 的会话过滤已恒含未关联，分组是纯呈现）；risk/decision/tool 是三个多选下拉（字段名只作触发器文案、不进选项；选中几项显示几项，宿主未给的字段不算命中；tool 选项 = 宿主 `status.tools`（实时工具注册表里该会话 agent 可见的名字，排除 `run_code`）∪ 已加载记录的 `action.name` ∪ 仍处于选中态但已不在注册表里的值——重启后恢复的历史记录因此仍可筛选，注册表是 live 来源而非唯一来源），无全文检索；审查时间紧接在 tool 之后、刷新按钮之前，`flex: 1 1 0` 精确占满这二者之间的剩余宽度：两个原生 `datetime-local` 输入（本地墙钟，闭区间，起点/终点可单独生效，11px 字号、28px 高、`--dsw-radius-sm`/`--dsw-alias-border-l3` 对齐筛选触发器，输入框按内容固有宽度显示、不拉伸，组件右侧余量留白，深色主题设 `color-scheme: dark`），有值时出现清除图标按钮；刷新与 About 是 header 行末的两个图标按钮。详情是"概览 + tab"布局：顶部概览卡（max-height ~30%、可滚）放着色 Tag、`provider/model`、审查时间、工具名与 arguments 的标识参数/说明行；下方同会话视图的下划线 tab 条（role=tab 排 + 激活下划线，该条在上游为会话私有不导出）四个面板——`工具调用`（pendingAction）、`审查上下文`（FILTERED_HISTORY 按原始 `kind`/`role`/`source.kind` 逐条不重分类）、`项目环境`（PROJECT_INSTRUCTIONS+ENVIRONMENT 同一面板）、`审查结果`（`思考` 折叠块收 reasoning 原文、`output.rawText` 紧跟其后无标题）；每个面板先走上游 `JsonTree`（轨迹检查器同款组件，copy 菜单关闭）；仅活动面板进 DOM；REVIEW_POLICY 仅在 header About 弹出层出现（从最新一条记录的 `sections.policy` 读取，无记录时如实说明而非编造）。
 
 
-**设置页**：`ctx.slots.inject('plugins.row.config', () => ctx.slots.register({name, key: '@dsh-electron/dsh-auto-review-panel#auto-review-panel', inject}))` 在插件管理页本插件条目下贡献 `view: 'page'` 的配置视图（`PluginConfigViewProps`）。页面提供三留存轴编辑、位置与用量展示、重置默认、经 `Modal` 确认的"清理全部历史"；持久化 `available:false` 时禁用写控件并显示 `lastError`。插件管理器缺席（非 electron 组合）时 slot 静默跳过、侧栏 tab 不受影响——软接缝，`dsh.client.inject` 声明即可。
+**设置页**：`ctx.slots.inject` 注册 `plugins.bundle.config`（键为包名 `@dsh-electron/dsh-auto-review-panel`），渲染在插件管理页本插件包页面的配置区。页面控件全部来自 `@deepseek-ai/dsh-client-ui-primitives`——`SettingsForm` 表单框架（只读通告/保存按钮/失败提示）+ 三个 `SettingsValueField` 留存轴编辑（非默认值带"非默认"徽标与字段级重置）、`PathLabel` 位置、`fileSizeText` 用量、整体重置默认、`RiskConfirmation` 勾选确认的"清理全部历史"、`Toast` 通知保存/清理结果；持久化 `available:false` 时表单只读、写控件禁用并显示 `lastError`。插件管理器缺席（非 electron 组合）时 slot 静默跳过、侧栏 tab 不受影响——软接缝，`dsh.client.inject` 声明即可。
 
 **注入**：`inject = [slots, locale, connection, sidebarRightTabs, pluginManager]`；`connection` 是必需 inject——缺席组合里本插件的 client 行不启动、tab 不存在（与宿主门禁同型的"未安装"退化）；`ctx.get` 是防御性读法，覆盖 apply 之后服务被替换的形状漂移，通道缺席空态经调用失败到达而非经 Connection 缺席。`dsh.client.inject` 同步 `@deepseek-ai/dsh-client-ui-sidebar-right` 与 `@deepseek-ai/dsh-client-ui-plugin-manager`。轨迹导航曾在本里程碑评估并撤销：可见 tab 切换走 `conversation.session` 私有 inject 面的 store actions（公开服务面无写口），call 级 focus 同理，无可靠接缝时宁可不提供按钮。
 

@@ -205,17 +205,19 @@ describe('two-stage mount', () => {
     })
   })
 
-  it('registers the row configuration entry under its `<package>#<row>` key', () => {
+  it('registers the bundle configuration entry under the package key', () => {
     const harness = mount()
-    const settings = harness.registrations.find(entry => entry.options.name === 'plugins.row.config')
-    expect(settings?.options).toMatchObject({
-      name: 'plugins.row.config',
-      key: '@dsh-electron/dsh-auto-review-panel#auto-review-panel',
+    const bundle = harness.registrations.find(entry => entry.options.name === 'plugins.bundle.config')
+    expect(bundle?.options).toMatchObject({
+      name: 'plugins.bundle.config',
+      key: '@dsh-electron/dsh-auto-review-panel',
       locale: 'auto-review-panel',
     })
+    // The row detail page carries no configuration entry.
+    expect(harness.registrations.some(entry => entry.options.name === 'plugins.row.config')).toBe(false)
     // The summary view answers with the localized one-liner, no channel needed.
-    const face = settings?.options.inject?.(SESSION)
-    const node = settings?.component({ view: 'summary', ...(face ?? {}), t: harness.dict })
+    const face = bundle?.options.inject?.(SESSION)
+    const node = bundle?.component({ view: 'summary', ...(face ?? {}), t: harness.dict })
     expect(node).toBe(zh['settings.summary'])
   })
 

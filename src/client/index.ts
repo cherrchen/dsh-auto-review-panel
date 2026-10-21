@@ -26,7 +26,7 @@ import type {} from '@deepseek-ai/dsh-client-connection/client'
 import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client'
 import { AutoReviewPanel, type PanelInjected } from './AutoReviewPanel.tsx'
 import { createPanelApi } from './panel-client.ts'
-import { RetentionSettings, ROW_CONFIG_KEY, type RetentionSettingsInjected } from './settings.tsx'
+import { RetentionSettings, BUNDLE_CONFIG_KEY, type RetentionSettingsInjected } from './settings.tsx'
 import { createRecordsSource } from './source.ts'
 import { NS, en, zh } from './locales.ts'
 import { STYLES } from './styles.ts'
@@ -54,11 +54,10 @@ export const inject = [
 ]
 
 /**
- * The `plugins.row.config` key of this bundle's `auto-review-panel` row —
- * `rowConfigKey(bundle, rowId)` spelled out so the plugin never imports the
- * plugin-manager client package at runtime.
+ * The `plugins.bundle.config` key — this bundle's package name, spelled out
+ * so the plugin never imports the plugin-manager client package at runtime.
  */
-export { ROW_CONFIG_KEY } from './settings.tsx'
+export { BUNDLE_CONFIG_KEY } from './settings.tsx'
 
 /**
  * Register the localized tab type, its keyed pane body, and the panel sheet.
@@ -104,14 +103,16 @@ export function apply(ctx: ClientContext): void {
     },
   }, AutoReviewPanel))
 
-  // The row's settings page is a soft seam: `plugins.row.config` exists only
-  // where the plugin-manager client runs. `slots.inject` registers lazily —
-  // in a composition without that slot the factory never runs, the entry
-  // never renders, and the sidebar tab keeps working.
-  ctx.slots.inject('plugins.row.config', () => ctx.slots.register({
-    name: 'plugins.row.config',
-    key: ROW_CONFIG_KEY,
+  // The settings surface is a soft seam: `plugins.bundle.config` (keyed by
+  // package name) renders on this plugin's package detail page.
+  // `slots.inject` registers lazily: in a composition without the plugin-
+  // manager client the factory never runs, the entry never renders, and
+  // the sidebar tab keeps working.
+  const settingsInject = (): RetentionSettingsInjected => api === undefined ? {} : { api }
+  ctx.slots.inject('plugins.bundle.config', () => ctx.slots.register({
+    name: 'plugins.bundle.config',
+    key: BUNDLE_CONFIG_KEY,
     locale: NS,
-    inject: (): RetentionSettingsInjected => api === undefined ? {} : { api },
+    inject: settingsInject,
   }, RetentionSettings))
 }

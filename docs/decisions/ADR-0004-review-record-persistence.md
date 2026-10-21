@@ -12,7 +12,7 @@ M1–M3 的审查记录只活在 `ReviewRecordBuffer` 的进程内存里：`dsh`
 1. **自持 per-session append-only JSONL 日志**，落在 `<DSH_HOME>/auto-review-panel/v1/`：`sessions/<key>.jsonl` 每会话一份（key 为 `s_` + base64url(sessionId)，超长退化 `h_` + sha256），`unassigned.jsonl` 收未关联记录的全局集合，`settings.json` 收留存设置。行格式 = 首行 `header`（schema + sessionId + 可选会话身份三元组）+ 后续 `record`/`patch`/`delete` 行；读取按序 fold，坏行跳过、`schema` 不识别的文件标记 foreign 永不覆写、损坏文件改名 `.corrupt-<stamp>` 保留字节。
 2. **持久化是 fire-and-forget 旁路**：`ReviewHistory` 接口的 `upsert` 同步返回空，每文件一条 promise 链串行化；`session/flush` 事件作正常持久化屏障（上游会 await 监听者）。写失败吞掉并 warn 一次，读失败降级为空——`stats`/`update-settings`/`clear` 是仅有的诚实报告面（设置页必须看到 `available:false`）。
 3. **会话生命周期校验**：header 存 `Session.header` 的 `createdAt/cwd/isSeeded` 三元组；live 会话身份与文件不符时读取返回空、下一次写入前把旧文件改名 `.stale-<stamp>` 再新建。冷会话（无 live Session）信任文件——这是"打开历史会话"的常规路径。
-4. **留存放进插件管理页本行配置区**（`plugins.row.config`，key = `<包名>#<行id>`），不进 `ctx.settings`：设置是本插件的自持运行数据（JSONL 同目录的 `settings.json`），不是 profile 配置；该页的 `form` 参数刻意忽略，不引入 `schemastery` 依赖、不改 profile patch。注册经 `slots.inject` 延迟——plugin-manager 客户端缺席时入口不出现、侧栏 tab 不受影响。
+4. **留存放进插件管理页包配置区**（`plugins.bundle.config`，key = 包名），不进 `ctx.settings`：设置是本插件的自持运行数据（JSONL 同目录的 `settings.json`），不是 profile 配置；该页的 `form` 参数刻意忽略，不引入 `schemastery` 依赖、不改 profile patch。注册经 `slots.inject` 延迟——plugin-manager 客户端缺席时入口不出现、侧栏 tab 不受影响。
 5. **读取按会话恢复，不做跨会话浏览**：`list(sessionId)` 合并内存摘要与该会话的持久化视图（会话文件 + 恒可见的 `unassigned`），内存赢所有 id 去重；无 `sessionId` 的 `list` 保持内存专属——持久化会话不扇出到无会话视图。分页用 `capturedAt|id` 键集游标；客户端加载更早页后暂停轮询（防游标边界空洞），`refresh()` 回到最新。
 
 ## 备选方案与拒绝理由

@@ -11,7 +11,7 @@
 | M1 | 审查记录捕获（宿主半部）：`llm/stream` 只读 tee + 结构指纹 + `pre-execute` 关联锚（`downstreamDecision`）+ 环形缓冲 + `PANEL_CHANNEL` list/get 端点 | 完成（2026-10-20） | — |
 | M2 | sidebar.right 面板（客户端半部）：tab 类型注册 + `sidebar.right.pane.tab` 面板体、列表/详情、四种空态、双语 | 完成（2026-10-20） | — |
 | M3 | 打磨与首发：关联/结局佐证增强、缓冲实测调参、真实组合验收、演示 GIF、首版发版 | **已完成**（2026-10-21） | `v0.1.0` |
-| M4 | 审查记录按会话持久化：per-session JSONL 日志（`DSH_HOME/auto-review-panel/v1/`）、留存设置页（`plugins.row.config`）、分页；重启后历史按会话恢复 | **已完成**（2026-10-21） | 随 `v0.1.0` |
+| M4 | 审查记录按会话持久化：per-session JSONL 日志（`DSH_HOME/auto-review-panel/v1/`）、留存设置页（`plugins.bundle.config`）、分页；重启后历史按会话恢复 | **已完成**（2026-10-21） | 随 `v0.1.0` |
 
 ### 初始化（2026-10-20）
 
@@ -78,7 +78,7 @@
 - **会话身份**：文件 header 携 `Session.header` 的 `{createdAt, cwd, isSeeded}`；live 会话逐字段不符 → 文件视为旧生命周期改名 aside；冷会话信任文件——sessionId 复用不会把新记录归到旧会话。
 - **动态依赖**：`@deepseek-ai/dsh-atomic-write`（temp+rename、`withFileLock`）与 `@deepseek-ai/dsh-home-paths`（`resolveDshHome`/`dshHomeDisplay`）均动态导入、缺席合法退化（进程内串行 + `rename`；`$DSH_HOME` 展开 + `~/.dsh` 兜底）——两包入 `RUNTIME_OPTIONAL_PACKAGES` 而非 peer。
 - **端点**：通道扩到五个——`list`（`before`/`limit` 键集分页，默认 200 上限 500）、`get`（内存未命中落盘回查）、`stats`（`available:false` 退化、符号化 `location`）、`update-settings`（非负整数、`0`=不限、`bad-request`/`persistence-unavailable` 语义）、`clear`（`confirm:true` 门闩，删历史文件+内存缓冲、留 `settings.json`）。sessionId 缺席的 `list` 只回内存——无跨会话浏览（ADR-0004 边界）。
-- **客户端**：列表 `loadOlder` 分页状态机（`first`/`older`/`olderPage`/`live` + epoch 防 refresh↔loadOlder 竞态），翻页暂停轮询并显示提示、刷新恢复；空态优先级「有记录 > reviewer 缺席 > 非 Auto > 在线无记录」（持久化历史压过①②④）；tool 筛选项并入已加载记录的 `action.name`；插件管理页 `plugins.row.config`（键 `@dsh-electron/dsh-auto-review-panel#auto-review-panel`）贡献 `view:'page'` 留存设置页——三轴编辑、位置/用量、重置、Modal 确认清理；plugin-manager 缺席时软跳过。
+- **客户端**：列表 `loadOlder` 分页状态机（`first`/`older`/`olderPage`/`live` + epoch 防 refresh↔loadOlder 竞态），翻页暂停轮询并显示提示、刷新恢复；空态优先级「有记录 > reviewer 缺席 > 非 Auto > 在线无记录」（持久化历史压过①②④）；tool 筛选项并入已加载记录的 `action.name`；插件管理页 `plugins.bundle.config`（键为包名 `@dsh-electron/dsh-auto-review-panel`）贡献 `view:'page'` 留存设置页——三轴编辑（`SettingsForm`/`SettingsValueField`）、`PathLabel` 位置、`fileSizeText` 用量、重置、`RiskConfirmation` 勾选确认清理、`Toast` 通知；plugin-manager 缺席时软跳过。
 - **如实边界**：硬杀最多丢最后一个 flush 屏障前的写窗口；单文件自身超总量上限保留并回报 warning 不截断；外国 schema 文件永不覆写——未来升级格式需读侧先懂；无"关闭持久化"开关（面板读历史走同一路径）。
 - **验证**：`vitest run` 9 文件 172 通过 1 跳过（`review-history.spec.ts` 24 项：JSONL 往返、header 身份校验、stale/corrupt/foreign 处理、unassigned tombstone 与压实、留存三轴、clear/flush/close、分页游标稳定性；`review-channel.spec.ts` 扩到 stats/update-settings/clear 与分页形状；`source.spec.ts` 分页状态机与竞态；`client-panel.spec.tsx` loadOlder/footer/暂停提示；`client-bundle.spec.ts` plugin-manager 注入声明；`compat.spec.ts` runtime-optional 分区）。`smoke:live` 实测持久化断言：文件落盘、stats/settings 端点经 wire、清理生效、**重启恢复**（同 `$DSH_HOME` 的 plain profile——无 reviewer——仍能列出完整历史含未关联组）。`pnpm verify:all` + `compat:check` + `docs:check` 全绿。
 

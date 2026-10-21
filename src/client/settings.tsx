@@ -1,14 +1,16 @@
 /**
- * The plugin-manager row configuration page for `auto-review-panel`.
+ * The plugin-manager bundle configuration page for `auto-review-panel`.
  *
- * Registered under `plugins.row.config` with the key
- * `@dsh-electron/dsh-auto-review-panel#auto-review-panel`. The page owns the
+ * Registered under `plugins.bundle.config` with the package name as its key,
+ * so it renders on this plugin's package detail page. The page owns the
  * three retention axes (`0` means unlimited — the shipped default), a usage
  * readout, and the one dangerous action, "clear all history", behind a
- * confirmation dialog. It is a plain consumer of the channel's settings
- * endpoints: `form` (the host's `ConfigPageForm`) is deliberately ignored —
- * this plugin's settings are its own runtime data, not profile config, so no
- * `ctx.settings` schema and no schemastery dependency are involved.
+ * `RiskConfirmation` acknowledgement. It is a plain consumer of the
+ * channel's settings endpoints: `form` (the host's `ConfigPageForm`) is
+ * deliberately ignored — this plugin's settings are its own runtime data,
+ * not profile config, so no `ctx.settings` schema and no `SettingsFormModel`
+ * scope are involved; the shared `SettingsForm`/`SettingsValueField`
+ * primitives supply the staged-draft chrome over our own draft state.
  *
  * The soft seam: when the channel is absent (`api === undefined`) the page
  * still renders — disabled, with the channel-missing notice — and when the
@@ -18,24 +20,33 @@
  * @module @dsh-electron/dsh-auto-review-panel/client/settings
  */
 
-import { createElement, useCallback, useEffect, useState, type ReactNode } from 'react'
+import { createElement, useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import type { InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { PluginConfigViewProps } from '@deepseek-ai/dsh-client-ui-plugin-manager/client'
-import { Button, Modal, TextShimmer } from '@deepseek-ai/dsh-client-ui-primitives'
+import {
+  Button,
+  PathLabel,
+  RiskConfirmation,
+  SettingsForm,
+  SettingsValueField,
+  TextShimmer,
+  Toast,
+  fileSizeText,
+} from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PanelStatsValue, ReviewHistoryRetention } from '../contract.ts'
 import { DEFAULT_RETENTION } from '../contract.ts'
 import type { PanelSettingsApi } from './panel-client.ts'
 import type { NS, Key } from './locales.ts'
 
-/** The `plugins.row.config` key of this bundle's `auto-review-panel` row. */
-export const ROW_CONFIG_KEY = '@dsh-electron/dsh-auto-review-panel#auto-review-panel'
+/** The `plugins.bundle.config` key — this bundle's package name. */
+export const BUNDLE_CONFIG_KEY = '@dsh-electron/dsh-auto-review-panel'
 
 /** The inject face `index.ts` hands the page: the settings half of the API. */
 export interface RetentionSettingsInjected {
   readonly api?: PanelSettingsApi
 }
 
-/** Composed props for the row's configuration entry. */
+/** Composed props for the bundle's configuration entry. */
 export type RetentionSettingsProps =
   & PluginConfigViewProps
   & InjectFace<RetentionSettingsInjected>
@@ -75,14 +86,16 @@ function draftsOf(settings: ReviewHistoryRetention): Drafts {
   }
 }
 
-/** Whether every draft parses and at least one differs from the applied settings. */
-function dirtyAndValid(drafts: Drafts, applied: ReviewHistoryRetention): boolean {
-  if (!drafts.maxRecordsPerSession.valid || !drafts.maxSessions.valid || !drafts.maxTotalMegabytes.valid) {
-    return false
-  }
-  return Number(drafts.maxRecordsPerSession.text.trim()) !== applied.maxRecordsPerSession
-    || Number(drafts.maxSessions.text.trim()) !== applied.maxSessions
-    || Number(drafts.maxTotalMegabytes.text.trim()) !== applied.maxTotalMegabytes
+/** Whether any staged text differs from the applied settings. */
+function isDirty(drafts: Drafts, applied: ReviewHistoryRetention): boolean {
+  return drafts.maxRecordsPerSession.text.trim() !== String(applied.maxRecordsPerSession)
+    || drafts.maxSessions.text.trim() !== String(applied.maxSessions)
+    || drafts.maxTotalMegabytes.text.trim() !== String(applied.maxTotalMegabytes)
+}
+
+/** Whether every draft parses. */
+function allValid(drafts: Drafts): boolean {
+  return drafts.maxRecordsPerSession.valid && drafts.maxSessions.valid && drafts.maxTotalMegabytes.valid
 }
 
 /** The retention a fully-valid draft set describes. */
@@ -92,20 +105,6 @@ function retentionOf(drafts: Drafts): ReviewHistoryRetention {
     maxSessions: Number(drafts.maxSessions.text.trim()),
     maxTotalMegabytes: Number(drafts.maxTotalMegabytes.text.trim()),
   }
-}
-
-/** Format a byte count for the usage line (KiB/MiB/GiB, one decimal). */
-export function formatBytes(bytes: number): string {
-  if (!Number.isFinite(bytes) || bytes < 0) return '0 B'
-  if (bytes < 1024) return `${bytes} B`
-  const units = ['KiB', 'MiB', 'GiB'] as const
-  let value = bytes
-  let unit = 0
-  while (value >= 1024 && unit < units.length - 1) {
-    value /= 1024
-    unit += 1
-  }
-  return `${value.toFixed(1)} ${units[unit]}`
 }
 
 /** What one maintenance pass reports back after a save. */
@@ -120,29 +119,11 @@ function maintenanceLine(maintenance: { compactedSessions: number; removedSessio
   })
 }
 
-/** One labelled numeric field with its help line and invalid marker. */
-function RetentionField({ label, help, draft, disabled, onChange, t }: {
-  readonly label: string
-  readonly help: string
-  readonly draft: Draft
-  readonly disabled: boolean
-  readonly onChange: (text: string) => void
-  readonly t: T
-}): ReactNode {
-  return e('label', { className: `arp-settings-field${draft.valid ? '' : ' arp-settings-invalid'}` },
-    e('span', { className: 'arp-settings-label' }, label),
-    e('input', {
-      type: 'number',
-      min: 0,
-      step: 1,
-      inputMode: 'numeric',
-      className: 'arp-settings-input',
-      value: draft.text,
-      disabled,
-      onChange: (event: { currentTarget: { value: string } }) => onChange(event.currentTarget.value),
-    }),
-    e('span', { className: 'arp-settings-help' },
-      draft.valid ? help : t('settings.invalid')))
+/** One transient notice the toast surfaces. */
+interface Notice {
+  readonly seq: number
+  readonly text: string
+  readonly tone?: 'success' | undefined
 }
 
 /** The `view: 'page'` body — only rendered once stats have loaded. */
@@ -154,8 +135,11 @@ function SettingsPage({ api, stats, onStats, t }: {
 }): ReactNode {
   const [drafts, setDrafts] = useState<Drafts>(() => draftsOf(stats.settings))
   const [saving, setSaving] = useState(false)
-  const [notice, setNotice] = useState<string | undefined>()
+  const [saveFailed, setSaveFailed] = useState(false)
+  const noticeSeq = useRef(0)
+  const [notice, setNotice] = useState<Notice | undefined>()
   const [confirming, setConfirming] = useState(false)
+  const [acknowledged, setAcknowledged] = useState(false)
   const [clearing, setClearing] = useState(false)
 
   // Reseed drafts only when the applied settings change underneath us (a save
@@ -166,27 +150,45 @@ function SettingsPage({ api, stats, onStats, t }: {
     if (stats.settings !== applied) {
       setApplied(stats.settings)
       setDrafts(current =>
-        dirtyAndValid(current, applied) ? current : draftsOf(stats.settings))
+        isDirty(current, applied) ? current : draftsOf(stats.settings))
     }
   }, [stats.settings, applied])
 
+  const say = useCallback((text: string, tone?: 'success') => {
+    noticeSeq.current += 1
+    setNotice({ seq: noticeSeq.current, text, tone })
+  }, [])
+
   const writable = stats.available
-  const dirty = dirtyAndValid(drafts, stats.settings)
-  const allValid = drafts.maxRecordsPerSession.valid && drafts.maxSessions.valid && drafts.maxTotalMegabytes.valid
+  const disabled = !writable || saving || clearing
+  const edit = useCallback((key: keyof Drafts) => (text: string) => {
+    setSaveFailed(false)
+    setDrafts(current => ({ ...current, [key]: draftOf(text) }))
+  }, [])
+  const resetField = useCallback((key: keyof Drafts) => () => {
+    setSaveFailed(false)
+    setDrafts(current => ({ ...current, [key]: draftOf('0') }))
+  }, [])
+
+  const discard = useCallback(() => {
+    setSaveFailed(false)
+    setDrafts(draftsOf(applied))
+  }, [applied])
 
   const save = useCallback(() => {
-    if (!allValid || saving) return
+    if (!allValid(drafts) || saving) return
     setSaving(true)
-    setNotice(undefined)
+    setSaveFailed(false)
     void api.updateSettings(retentionOf(drafts))
       .then(result => {
         onStats(result.stats)
-        setNotice(maintenanceLine(result.maintenance, t) ?? t('settings.saved'))
-      }, () => setNotice(t('settings.error')))
+        say(maintenanceLine(result.maintenance, t) ?? t('settings.saved'), 'success')
+      }, () => setSaveFailed(true))
       .finally(() => setSaving(false))
-  }, [api, drafts, allValid, saving, onStats, t])
+  }, [api, drafts, saving, onStats, t, say])
 
   const resetAll = useCallback(() => {
+    setSaveFailed(false)
     setDrafts(draftsOf(DEFAULT_RETENTION))
   }, [])
 
@@ -196,92 +198,112 @@ function SettingsPage({ api, stats, onStats, t }: {
     void api.clear()
       .then(result => {
         setConfirming(false)
+        setAcknowledged(false)
         onStats(result.stats)
-        setNotice(t('settings.cleared', {
+        say(t('settings.cleared', {
           sessions: result.removedSessions,
-          bytes: formatBytes(result.removedBytes),
-        }))
+          bytes: fileSizeText(result.removedBytes),
+        }), 'success')
       }, () => {
         setConfirming(false)
-        setNotice(t('settings.error'))
+        setAcknowledged(false)
+        say(t('settings.error'))
       })
       .finally(() => setClearing(false))
-  }, [api, clearing, onStats, t])
+  }, [api, clearing, onStats, t, say])
 
   const field = (key: keyof Drafts, labelKey: Key, helpKey: Key): ReactNode =>
-    e(RetentionField, {
+    e(SettingsValueField, {
+      key,
+      id: `arp-settings-${key}`,
       label: t(labelKey),
-      help: t(helpKey),
-      draft: drafts[key],
-      disabled: !writable || saving || clearing,
-      onChange: (text: string) =>
-        setDrafts(current => ({ ...current, [key]: draftOf(text) })),
-      t,
+      hint: t(helpKey),
+      text: drafts[key].text,
+      numeric: true,
+      overridden: drafts[key].text.trim() !== '0',
+      invalid: !drafts[key].valid,
+      overriddenLabel: t('settings.overridden'),
+      resetLabel: t('settings.reset'),
+      invalidLabel: t('settings.invalid'),
+      disabled,
+      onEdit: edit(key),
+      onReset: resetField(key),
     })
 
   return e('div', { className: 'arp-settings' },
     e('p', { className: 'arp-settings-intro' }, t('settings.intro')),
     e('div', { className: 'arp-settings-location' },
       e('span', { className: 'arp-settings-location-label' }, t('settings.location')),
-      e('code', { className: 'arp-settings-location-value' },
-        stats.location ?? t('settings.locationUnknown'))),
-    !stats.available
+      e(PathLabel, {
+        className: 'arp-settings-location-value',
+        path: stats.location ?? t('settings.locationUnknown'),
+      })),
+    !stats.available && stats.lastError !== undefined
       ? e('div', { className: 'arp-settings-unavailable' },
-          t('settings.unavailable'),
-          stats.lastError === undefined ? null
-            : e('span', { className: 'arp-settings-last-error' }, stats.lastError))
+          `${t('settings.lastError')}: `,
+          e('span', { className: 'arp-settings-last-error' }, stats.lastError))
       : null,
-    e('div', { className: 'arp-settings-fields' },
-      field('maxRecordsPerSession', 'settings.perSession', 'settings.perSessionHelp'),
-      field('maxSessions', 'settings.sessions', 'settings.sessionsHelp'),
-      field('maxTotalMegabytes', 'settings.totalMegabytes', 'settings.totalMegabytesHelp')),
+    e(SettingsForm, {
+      state: {
+        available: true,
+        writable,
+        dirty: isDirty(drafts, applied),
+        invalid: !allValid(drafts),
+        saving,
+        failed: saveFailed,
+      },
+      labels: {
+        unavailable: t('settings.unavailable'),
+        readOnly: t('settings.readOnly'),
+        saveFailed: t('settings.error'),
+        save: t('settings.save'),
+        saving: t('settings.saving'),
+      },
+      onSave: save,
+      onDiscard: discard,
+      children: e('div', { className: 'arp-settings-fields' },
+        field('maxRecordsPerSession', 'settings.perSession', 'settings.perSessionHelp'),
+        field('maxSessions', 'settings.sessions', 'settings.sessionsHelp'),
+        field('maxTotalMegabytes', 'settings.totalMegabytes', 'settings.totalMegabytesHelp')),
+    }),
     e('div', { className: 'arp-settings-actions' },
-      e(Button, {
-        variant: 'primary',
-        size: 'sm',
-        disabled: !writable || !dirty || saving || clearing,
-        onClick: save,
-      }, saving ? t('settings.saving') : t('settings.save')),
       e(Button, {
         variant: 'outline',
         size: 'sm',
-        disabled: !writable || saving || clearing,
+        disabled,
         onClick: resetAll,
       }, t('settings.resetAll'))),
     e('div', { className: 'arp-settings-usage' },
       e('span', { className: 'arp-settings-usage-label' }, t('settings.usage')),
       e('span', { className: 'arp-settings-usage-line' },
-        t('settings.usageLine', { sessions: stats.sessions, bytes: formatBytes(stats.bytes) }))),
+        t('settings.usageLine', { sessions: stats.sessions, bytes: fileSizeText(stats.bytes) }))),
     e('div', { className: 'arp-settings-danger' },
       e(Button, {
         variant: 'outline',
         size: 'sm',
         className: 'arp-settings-clear',
-        disabled: !writable || saving || clearing,
+        disabled,
         onClick: () => setConfirming(true),
       }, t('settings.clear'))),
-    notice === undefined ? null : e('div', { className: 'arp-settings-notice' }, notice),
-    e(Modal, {
+    e(RiskConfirmation, {
       open: confirming,
-      onClose: () => { if (!clearing) setConfirming(false) },
       title: t('settings.clearTitle'),
-      closeLabel: t('settings.clearCancel'),
       description: t('settings.clearBody'),
-      className: 'arp-settings-clear-modal',
-      footer: e('div', { className: 'arp-settings-clear-actions' },
-        e(Button, {
-          variant: 'outline',
-          size: 'sm',
-          disabled: clearing,
-          onClick: () => setConfirming(false),
-        }, t('settings.clearCancel')),
-        e(Button, {
-          variant: 'primary',
-          size: 'sm',
-          className: 'arp-settings-clear-confirm',
-          disabled: clearing,
-          onClick: runClear,
-        }, clearing ? t('settings.clearing') : t('settings.clearConfirm'))),
+      acknowledgeLabel: t('settings.clearAcknowledge'),
+      cancelLabel: t('settings.clearCancel'),
+      closeLabel: t('about.close'),
+      confirmLabel: clearing ? t('settings.clearing') : t('settings.clearConfirm'),
+      acknowledged,
+      disabled: clearing,
+      onAcknowledgedChange: setAcknowledged,
+      onCancel: () => { if (!clearing) { setConfirming(false); setAcknowledged(false) } },
+      onConfirm: runClear,
+    }),
+    notice === undefined ? null : e(Toast, {
+      key: notice.seq,
+      text: notice.text,
+      ...(notice.tone === 'success' ? { tone: 'success' as const } : {}),
+      onDone: () => setNotice(current => current?.seq === notice.seq ? undefined : current),
     }))
 }
 
@@ -310,7 +332,7 @@ function SettingsRoot({ api, t }: { readonly api: PanelSettingsApi; readonly t: 
   return e(SettingsPage, { api, stats, onStats: setStats, t })
 }
 
-/** The row's configuration entry: a one-liner in `summary`, the page in `page`. */
+/** The bundle's configuration entry: a one-liner in `summary`, the page in `page`. */
 export function RetentionSettings(props: RetentionSettingsProps): ReactNode {
   const { view, api, t } = props
 

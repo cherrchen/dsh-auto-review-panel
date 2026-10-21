@@ -235,8 +235,8 @@ export interface PanelGetRequest {
 }
 
 /**
- * Retention limits for the persisted history, configured from the row's
- * `plugins.row.config` page. `0` on any axis means unlimited — the shipped
+ * Retention limits for the persisted history, configured from the bundle's
+ * `plugins.bundle.config` page. `0` on any axis means unlimited — the shipped
  * default keeps everything.
  */
 export interface ReviewHistoryRetention {
