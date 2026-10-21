@@ -13,10 +13,11 @@ Under DSH (DeepSeek Harness)'s Auto permission preset, the Auto Review reviewer 
 This plugin is an out-of-tree extension that modifies no upstream code and gives Auto Review **a visible panel**: it surfaces the reviewer's verdicts, risk levels, and rationale in the sidebar, so "why was this call approved or denied" is no longer a black box you can only guess at from session messages.
 
 - **Read-only presentation, no verdict changes**: the panel is a UI/transport surface over the review state, not a second reviewer. Authorization policy, risk grading, and source classification belong entirely to the official Auto Review (see the [upstream survey](./docs/reference/upstream-auto-review.md)); this plugin never decides, intercepts, or recomputes a call — review content is captured through a read-only `llm/stream` observation seam — a fingerprint miss simply records nothing and never fabricates ([ADR-0003](./docs/decisions/ADR-0003-review-record-capture.md)).
+- **Per-session persisted history**: review records land on disk under `<DSH_HOME>/auto-review-panel/v1/` (`~/.dsh/auto-review-panel/v1/` by default) and are restored per session across `dsh` restarts; they stay visible after Auto Review is disabled or the session leaves the Auto preset, and uncorrelated records (the batch upstream stops with `deny + never`) remain visible in every session view. Retention is unlimited by default; limits and clearing live on this plugin's row configuration page in the plugin manager (see the [user guide](./docs/guide/README.en.md#where-review-history-lives-and-for-how-long) and [ADR-0004](./docs/decisions/ADR-0004-review-record-persistence.md)).
 - **Host/client halves**: the host half carries the channel that reads review state; the browser half renders it into the sidebar. The two halves talk over DSH's Connection channel — no private HTTP surface.
 - **Absent config means absent plugin**: when the host's DSH release is not on the allowlist, or core packages mix releases, the plugin's rows simply do not start and the composition degrades to "plugin not installed" — a deliberate fail-closed, see [ADR-0001](./docs/decisions/ADR-0001-dsh-compat-contract.md).
 
-The first release `v0.1.0` is ready: review-record capture, host-outcome evidence, and the sidebar.right panel have all landed, verified by `smoke:live` in a real composition against the official `@deepseek-ai/dsh-experimental-auto-review@0.2.1-rc.2` (npm `next`). Progress and release state live in the [roadmap progress ledger](./docs/plans/completed/2026-10-20-auto-review-panel.md#进度总账).
+The first release `v0.1.0` is ready: review-record capture, host-outcome evidence, the sidebar.right panel, and per-session persistence have all landed, verified by `smoke:live` in a real composition against the official `@deepseek-ai/dsh-experimental-auto-review@0.2.1-rc.2` (npm `next`) — including on-disk writes and restart recovery. Progress and release state live in the [roadmap progress ledger](./docs/plans/completed/2026-10-20-auto-review-panel.md#进度总账).
 
 ## Requirements
 
@@ -95,9 +96,10 @@ All three plugin rows are mounted: `auto-review-panel-compat` is the boot gate, 
 │   ├── host.ts                      the capture core: in-flight correlation, host-outcome evidence, endpoint bodies
 │   ├── channel.ts                   the PANEL_CHANNEL mount (connection.rpc.handle, a soft seam)
 │   ├── records.ts                   the two-ring record buffer and the list projection
+│   ├── history/                     per-session JSONL persistence (contract/format/paths/store/lazy)
 │   ├── contract.ts                  the shared host/client wire contract
 │   ├── panel.ts                     the panel's host half: the autoReviewPanel service row
-│   ├── client/                      browser half: the panel component, polling source, copy and styles
+│   ├── client/                      browser half: the panel component, polling source, retention settings page, copy and styles
 │   └── index.ts                     public-surface barrel; its no-op apply also backs the bare-name client-graph anchor row
 ├── tests/                           host capture/buffer/channel, compat verdicts, patch invariants, client panel and artifact shape
 ├── scripts/                         smokes (compose / packed / live), compat-contract check, pack gate, upgrade flow, lefthook installer
@@ -116,7 +118,8 @@ Issues and PRs are welcome:
 
 ## Known limitations
 
-- Records live only in memory: nothing persists across a process restart, and records without a `correlation.callId` anchor stay honestly in the "uncorrelated" group with no host-outcome evidence.
+- Records persist as **plaintext** JSONL under `<DSH_HOME>/auto-review-panel/v1/`: the full review request text and reasoning are on disk, unencrypted and never uploaded — treat them as local sensitive files on shared machines; there is no "persistence off" switch (the panel's read path goes through the same store).
+- No cross-session history browsing: the session-less view shows only the current process's in-memory records; records without a `correlation.callId` anchor stay honestly in the "uncorrelated" group with no host-outcome evidence.
 - The support matrix is an exact-version allowlist: when the host release is unlisted, or core packages mix releases, the gated `auto-review-panel` row **does not start** and the composition degrades to "plugin not installed" ([ADR-0001](./docs/decisions/ADR-0001-dsh-compat-contract.md)).
 - The official Auto Review exposes no dedicated data feed for a panel: verdicts and rationale must be read through existing host-side seams, and if upstream changes those seams' shape, only the adaptation layer or the upgrade lane can notice — this plugin makes no cross-version semantic guarantee ([upstream survey](./docs/reference/upstream-auto-review.md)).
 

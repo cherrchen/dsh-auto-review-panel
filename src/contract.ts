@@ -194,22 +194,115 @@ export interface PanelStatus {
    * the host read it back.
    */
   readonly reviewerPackage?: string
+  /**
+   * The tool names the session's agent can see in the live registry, sorted.
+   * Read from the registry, never inferred from captured records; the reserved
+   * `run_code` transport is excluded because the reviewer never reviews the
+   * transport itself. Absent when the host cannot read the registry.
+   */
+  readonly tools?: readonly string[]
 }
 
 /** `list` success value. Records are newest first. */
 export interface PanelListValue {
   readonly records: readonly ReviewRecordSummary[]
   readonly status: PanelStatus
+  /**
+   * Keyset pagination over the merged memory + persisted history: `hasMore`
+   * says strictly older entries exist, and `before` is the cursor that fetches
+   * the next page (the `capturedAt|id` of the last row returned).
+   */
+  readonly page: {
+    readonly hasMore: boolean
+    readonly before?: string
+  }
 }
 
 /** `list` request payload. */
 export interface PanelListRequest {
   readonly sessionId?: string
+  /** Return only entries strictly older than this `capturedAt|id` cursor. */
+  readonly before?: string
+  /** Maximum rows; absent uses the host default. */
+  readonly limit?: number
 }
 
 /** `get` request payload. */
 export interface PanelGetRequest {
   readonly id: string
+  /** The session the record is expected under; persisted lookups need it. */
+  readonly sessionId?: string
+}
+
+/**
+ * Retention limits for the persisted history, configured from the bundle's
+ * `plugins.bundle.config` page. `0` on any axis means unlimited — the shipped
+ * default keeps everything.
+ */
+export interface ReviewHistoryRetention {
+  /** Newest records kept per session file; older ones are compacted away. */
+  readonly maxRecordsPerSession: number
+  /** Session files kept; the oldest by mtime are removed past the cap. */
+  readonly maxSessions: number
+  /** Total size cap across session files plus the unassigned log. */
+  readonly maxTotalMegabytes: number
+}
+
+/** The shipped retention: keep everything. */
+export const DEFAULT_RETENTION: ReviewHistoryRetention = {
+  maxRecordsPerSession: 0,
+  maxSessions: 0,
+  maxTotalMegabytes: 0,
+}
+
+/** `stats` success value: the persistence store's health report. */
+export interface PanelStatsValue {
+  /** Whether the history root is usable; `false` means memory-only mode. */
+  readonly available: boolean
+  /** Symbolic location (`~/.dsh/…` or `$DSH_HOME/…`), never a machine path. */
+  readonly location?: string
+  readonly settings: ReviewHistoryRetention
+  /** Session log files currently kept. */
+  readonly sessions: number
+  /** Total bytes of session files plus the unassigned log. */
+  readonly bytes: number
+  /** The last persistence failure the store swallowed, when one exists. */
+  readonly lastError?: string
+}
+
+/** `update-settings` request payload. */
+export interface PanelUpdateSettingsRequest {
+  readonly retention: ReviewHistoryRetention
+}
+
+/** What one retention-triggered maintenance pass did. */
+export interface PanelMaintenance {
+  /** Session files rewritten down to their per-session cap. */
+  readonly compactedSessions: number
+  /** Session files removed by the session-count or total-size caps. */
+  readonly removedSessions: number
+  /** Records dropped by compaction or eviction. */
+  readonly removedRecords: number
+  /** Conditions the pass could not fully honor (e.g. an individually oversized file). */
+  readonly warnings?: readonly string[]
+}
+
+/** `update-settings` success value: post-write stats plus what maintain() did. */
+export interface PanelUpdateSettingsValue {
+  readonly stats: PanelStatsValue
+  readonly maintenance: PanelMaintenance
+}
+
+/** `clear` request payload; `confirm` must be exactly `true`. */
+export interface PanelClearRequest {
+  readonly confirm: true
+}
+
+/** `clear` success value: what was removed, then the emptied stats. */
+export interface PanelClearValue {
+  readonly removedSessions: number
+  readonly removedBytes: number
+  readonly stats: PanelStatsValue
 }
 
 /** One carrier-neutral failure returned by a panel endpoint. */

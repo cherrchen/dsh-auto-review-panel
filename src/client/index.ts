@@ -17,6 +17,7 @@
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 // Type-only: the CLIENT faces that publish the services this half injects.
 import type {} from '@deepseek-ai/dsh-client-locale/client'
+import type {} from '@deepseek-ai/dsh-client-ui-plugin-manager/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar-right/client'
@@ -25,6 +26,7 @@ import type {} from '@deepseek-ai/dsh-client-connection/client'
 import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client'
 import { AutoReviewPanel, type PanelInjected } from './AutoReviewPanel.tsx'
 import { createPanelApi } from './panel-client.ts'
+import { RetentionSettings, BUNDLE_CONFIG_KEY, type RetentionSettingsInjected } from './settings.tsx'
 import { createRecordsSource } from './source.ts'
 import { NS, en, zh } from './locales.ts'
 import { STYLES } from './styles.ts'
@@ -50,6 +52,12 @@ const STYLE_ELEMENT_ID = 'auto-review-panel-styles'
 export const inject = [
   'slots', 'locale', 'connection', 'sidebarRightTabs',
 ]
+
+/**
+ * The `plugins.bundle.config` key — this bundle's package name, spelled out
+ * so the plugin never imports the plugin-manager client package at runtime.
+ */
+export { BUNDLE_CONFIG_KEY } from './settings.tsx'
 
 /**
  * Register the localized tab type, its keyed pane body, and the panel sheet.
@@ -88,9 +96,23 @@ export function apply(ctx: ClientContext): void {
       const records = createRecordsSource(api, sessionId)
       return {
         hooks: { records },
-        getRecord: async (id, signal) => api === undefined ? undefined : api.get(id, signal),
+        getRecord: async (id, signal) => api === undefined ? undefined : api.get(id, sessionId, signal),
         refresh: () => records.refresh(),
+        loadOlder: () => records.loadOlder(),
       }
     },
   }, AutoReviewPanel))
+
+  // The settings surface is a soft seam: `plugins.bundle.config` (keyed by
+  // package name) renders on this plugin's package detail page.
+  // `slots.inject` registers lazily: in a composition without the plugin-
+  // manager client the factory never runs, the entry never renders, and
+  // the sidebar tab keeps working.
+  const settingsInject = (): RetentionSettingsInjected => api === undefined ? {} : { api }
+  ctx.slots.inject('plugins.bundle.config', () => ctx.slots.register({
+    name: 'plugins.bundle.config',
+    key: BUNDLE_CONFIG_KEY,
+    locale: NS,
+    inject: settingsInject,
+  }, RetentionSettings))
 }

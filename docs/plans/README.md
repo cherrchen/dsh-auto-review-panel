@@ -36,11 +36,14 @@ completed/
 
 ## 当前状态
 
-active：暂无。
+active：
+
+- （空）
 
 completed：
 
-- [2026-10-20-auto-review-panel.md](./completed/2026-10-20-auto-review-panel.md) — Auto Review Panel 开发路径与**进度总账**：初始化、M1 审查记录捕获、M2 面板、M3 打磨与首发，全部完成，随 `v0.1.0` 发版。
+- [2026-10-20-auto-review-panel.md](./completed/2026-10-20-auto-review-panel.md) — Auto Review Panel 开发路径与**进度总账**：初始化、M1 审查记录捕获、M2 面板、M3 打磨与首发、M4 持久化，全部完成，随 `v0.1.0` 发版。
+- [2026-10-21-m4-review-record-persistence.md](./completed/2026-10-21-m4-review-record-persistence.md) — M4：审查记录按会话持久化（per-session JSONL + 留存设置页 + 分页），已完成，随 `v0.1.0` 发版。
 
 ### 编号口径
 

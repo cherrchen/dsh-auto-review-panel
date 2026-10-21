@@ -15,6 +15,7 @@
  * @module @dsh-electron/dsh-auto-review-panel/host
  */
 
+import { randomUUID } from 'node:crypto'
 import type { GenerateOptions, StreamChunk } from '@deepseek-ai/dsh-llm'
 import type { Session, SessionId } from '@deepseek-ai/dsh-session'
 import type { PreToolDecision } from '@deepseek-ai/dsh-tools'
@@ -24,14 +25,29 @@ import {
 } from './capture.ts'
 import { matchReviewRequest } from './compat/review-fingerprint.ts'
 import type {
+  PanelClearRequest,
+  PanelClearValue,
   PanelListRequest,
   PanelListValue,
   PanelRpcResult,
+  PanelStatsValue,
   PanelStatus,
+  PanelUpdateSettingsRequest,
+  PanelUpdateSettingsValue,
   ReviewActionMode,
+  ReviewHistoryRetention,
   ReviewHostOutcome,
   ReviewRecord,
+  ReviewRecordSummary,
 } from './contract.ts'
+import { DEFAULT_RETENTION } from './contract.ts'
+import type { ReviewHistory, ReviewHistoryClearResult, ReviewSessionIdentity } from './history/contract.ts'
+import {
+  compareSummariesDesc,
+  formatCursor,
+  isOlderThanCursor,
+  parseCursor,
+} from './history/format.ts'
 import { ReviewRecordBuffer, type ReviewRecordBufferOptions } from './records.ts'
 
 /** The `permissionPresets` surface the host actually reads. */
@@ -75,6 +91,17 @@ export interface ReviewCaptureHostOptions {
    * the About line shows the reviewer package only when the host can read it.
    */
   readonly listPluginNames?: () => readonly string[]
+  /**
+   * Enumerate the tool names one session's agent can see. Optional: the tool
+   * filter shows registry options only when the host can read the registry.
+   */
+  readonly listToolNames?: (sessionId: string) => readonly string[]
+  /**
+   * The persistence seam. Absent means memory-only mode: capture, correlation
+   * and the read endpoints behave exactly as before, and `stats` reports
+   * `available: false`.
+   */
+  readonly history?: ReviewHistory
   readonly now?: () => string
   readonly createId?: () => string
   readonly globalCapacity?: number
@@ -138,17 +165,64 @@ function readListRequest(payload: unknown): PanelListRequest | undefined {
   if (payload === undefined || payload === null) return {}
   if (!isRecord(payload)) return undefined
   const sessionId = payload['sessionId']
-  if (sessionId === undefined) return {}
-  if (typeof sessionId !== 'string' || sessionId.length === 0) return undefined
-  return { sessionId }
+  const before = payload['before']
+  const limit = payload['limit']
+  if (sessionId !== undefined && (typeof sessionId !== 'string' || sessionId.length === 0)) return undefined
+  if (before !== undefined && typeof before !== 'string') return undefined
+  if (limit !== undefined && (typeof limit !== 'number' || !Number.isInteger(limit) || limit <= 0)) return undefined
+  return {
+    ...(sessionId === undefined ? {} : { sessionId }),
+    ...(before === undefined ? {} : { before }),
+    ...(limit === undefined ? {} : { limit }),
+  }
 }
 
 /** Read the required `get` payload. */
-function readGetRequest(payload: unknown): { readonly id: string } | undefined {
+function readGetRequest(payload: unknown): { readonly id: string; readonly sessionId?: string } | undefined {
   if (!isRecord(payload)) return undefined
   const id = payload['id']
-  return typeof id === 'string' && id.length > 0 ? { id } : undefined
+  const sessionId = payload['sessionId']
+  if (typeof id !== 'string' || id.length === 0) return undefined
+  if (sessionId !== undefined && (typeof sessionId !== 'string' || sessionId.length === 0)) return undefined
+  return { id, ...(sessionId === undefined ? {} : { sessionId }) }
 }
+
+/**
+ * Read the `update-settings` payload. Every retention axis must be a
+ * non-negative integer; `0` means unlimited.
+ */
+function readRetention(value: unknown): ReviewHistoryRetention | undefined {
+  if (!isRecord(value)) return undefined
+  const field = (name: string): number | undefined => {
+    const axis = value[name]
+    return typeof axis === 'number' && Number.isInteger(axis) && axis >= 0 ? axis : undefined
+  }
+  const maxRecordsPerSession = field('maxRecordsPerSession')
+  const maxSessions = field('maxSessions')
+  const maxTotalMegabytes = field('maxTotalMegabytes')
+  if (maxRecordsPerSession === undefined || maxSessions === undefined || maxTotalMegabytes === undefined) {
+    return undefined
+  }
+  return { maxRecordsPerSession, maxSessions, maxTotalMegabytes }
+}
+
+/** Read the `update-settings` request. */
+function readUpdateSettingsRequest(payload: unknown): PanelUpdateSettingsRequest | undefined {
+  if (!isRecord(payload)) return undefined
+  const retention = readRetention(payload['retention'])
+  return retention === undefined ? undefined : { retention }
+}
+
+/** Read the `clear` payload: `confirm` must be exactly `true`. */
+function readClearRequest(payload: unknown): PanelClearRequest | undefined {
+  if (!isRecord(payload)) return undefined
+  return payload['confirm'] === true ? { confirm: true } : undefined
+}
+
+/** The default `list` page size when the request carries no `limit`. */
+const DEFAULT_PAGE_LIMIT = 200
+/** The largest page one `list` serves regardless of the requested limit. */
+const MAX_PAGE_LIMIT = 500
 
 /** Whether two tracked executions are the same reviewed action. */
 function sameExecution(left: TrackedExecution, right: TrackedExecution): boolean {
@@ -168,9 +242,16 @@ export class ReviewCaptureHost {
   readonly #autoPreset: string
   readonly #runCodeName: string
   readonly #listPluginNames: () => readonly string[]
+  readonly #listToolNames: ((sessionId: string) => readonly string[]) | undefined
   readonly #now: () => string
   readonly #createId: () => string
   readonly #inFlight = new Set<TrackedExecution>()
+  /**
+   * The persistence seam — a fire-and-forget audit log under the history
+   * root. `undefined` means memory-only mode; the capture path reads it as
+   * absent either way.
+   */
+  readonly #history: ReviewHistory | undefined
   /**
    * callKey → record id, for Session-event outcome evidence. Bounded by the
    * global ring: an index entry is only useful while its record survives.
@@ -196,7 +277,6 @@ export class ReviewCaptureHost {
    */
   readonly #ambiguousRecords = new Set<string>()
   #suspectedReviewStreams = 0
-  #recordCounter = 0
 
   constructor(options: ReviewCaptureHostOptions) {
     this.#permissionPresets = options.permissionPresets
@@ -204,8 +284,13 @@ export class ReviewCaptureHost {
     this.#autoPreset = options.autoPreset
     this.#runCodeName = options.runCodeName
     this.#listPluginNames = options.listPluginNames ?? (() => [])
+    this.#listToolNames = options.listToolNames
     this.#now = options.now ?? (() => new Date().toISOString())
-    this.#createId = options.createId ?? (() => `review-${++this.#recordCounter}`)
+    // Persisted records outlive one process, so the default id must be
+    // unique ACROSS processes — a monotonic counter would collide the moment
+    // two lives of the same host each captured a `review-1`.
+    this.#createId = options.createId ?? (() => `review-${randomUUID()}`)
+    this.#history = options.history
     const bufferOptions: ReviewRecordBufferOptions = {
       ...(options.globalCapacity === undefined ? {} : { globalCapacity: options.globalCapacity }),
       ...(options.sessionCapacity === undefined ? {} : { sessionCapacity: options.sessionCapacity }),
@@ -253,6 +338,7 @@ export class ReviewCaptureHost {
         sections: match.sections,
       }, id, capturedAt, record => {
         this.buffer.add(record)
+        this.#persist(record)
         this.#pruneAmbiguity()
       })
     } catch {
@@ -305,36 +391,209 @@ export class ReviewCaptureHost {
 
   /**
    * Dispatch one panel endpoint.
-   * @param endpoint - `list` or `get`.
+   *
+   * The read endpoints merge the in-memory ring with persisted history:
+   * memory answers for the live process (and wins every dedupe), the store
+   * answers for what survived a restart. `list` is keyset-paginated over the
+   * merged newest-first order; `get` falls through to the persisted record
+   * only when the id is memory-resident nowhere.
+   * @param endpoint - `list`, `get`, `stats`, `update-settings` or `clear`.
    * @param payload - endpoint-owned request object.
    * @returns the carrier-neutral envelope.
    */
-  handle(endpoint: unknown, payload: unknown): PanelRpcResult<unknown> {
+  async handle(endpoint: unknown, payload: unknown): Promise<PanelRpcResult<unknown>> {
     if (endpoint === 'list') {
       const request = readListRequest(payload)
       if (request === undefined) {
-        return failure('panel/bad-request', 'list expects { sessionId?: string }', { endpoint: 'list' })
+        return failure('panel/bad-request', 'list expects { sessionId?: string, before?: string, limit?: number }', { endpoint: 'list' })
       }
+      const cursor = request.before === undefined ? undefined : parseCursor(request.before)
+      if (request.before !== undefined && cursor === undefined) {
+        return failure('panel/bad-request', 'list.before expects a "capturedAt|id" cursor', { endpoint: 'list' })
+      }
+      // A session-less `list` stays memory-only by design: persisted history
+      // is restored per session ("仅按会话恢复"), so an unscoped view never
+      // fans out across session files.
+      const merged = request.sessionId === undefined
+        ? this.buffer.summaries(undefined)
+        : await this.#mergedSummaries(request.sessionId)
+      const filtered = cursor === undefined ? merged : merged.filter(entry => isOlderThanCursor(entry, cursor))
+      const limit = Math.min(request.limit ?? DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT)
+      const page = filtered.slice(0, limit)
+      const last = page[page.length - 1]
       const value: PanelListValue = {
-        records: this.buffer.summaries(request.sessionId),
+        records: page,
         status: this.#status(request.sessionId),
+        page: {
+          hasMore: filtered.length > page.length,
+          ...(last === undefined ? {} : { before: formatCursor(last) }),
+        },
       }
       return { ok: true, value }
     }
     if (endpoint === 'get') {
       const request = readGetRequest(payload)
       if (request === undefined) {
-        return failure('panel/bad-request', 'get expects { id: string }', { endpoint: 'get' })
+        return failure('panel/bad-request', 'get expects { id: string, sessionId?: string }', { endpoint: 'get' })
       }
-      const record = this.buffer.get(request.id)
+      const record = this.buffer.get(request.id) ?? await this.#persistedGet(request.sessionId, request.id)
       if (record === undefined) {
         return failure('review-record-not-found', `No review record with id "${request.id}"`, { id: request.id })
       }
       return { ok: true, value: record }
     }
+    if (endpoint === 'stats') {
+      return { ok: true, value: await this.#safeStats() }
+    }
+    if (endpoint === 'update-settings') {
+      const request = readUpdateSettingsRequest(payload)
+      if (request === undefined) {
+        return failure('panel/bad-request', 'update-settings expects { retention: { maxRecordsPerSession, maxSessions, maxTotalMegabytes } }', { endpoint: 'update-settings' })
+      }
+      if (this.#history === undefined) {
+        return failure('panel/persistence-unavailable', 'history persistence is unavailable', { endpoint: 'update-settings' })
+      }
+      try {
+        const value: PanelUpdateSettingsValue = await this.#history.updateSettings(request.retention)
+        return { ok: true, value }
+      } catch {
+        return failure('panel/persistence-unavailable', 'history persistence is unavailable', { endpoint: 'update-settings' })
+      }
+    }
+    if (endpoint === 'clear') {
+      const request = readClearRequest(payload)
+      if (request === undefined) {
+        return failure('panel/bad-request', 'clear expects { confirm: true }', { endpoint: 'clear' })
+      }
+      if (this.#history === undefined) {
+        return failure('panel/persistence-unavailable', 'history persistence is unavailable', { endpoint: 'clear' })
+      }
+      try {
+        const cleared = await this.clearHistory()
+        const value: PanelClearValue = { ...cleared, stats: await this.#safeStats() }
+        return { ok: true, value }
+      } catch {
+        return failure('panel/persistence-unavailable', 'history persistence is unavailable', { endpoint: 'clear' })
+      }
+    }
     return failure('panel/unknown-endpoint', `Unknown panel endpoint: ${String(endpoint)}`, {
       endpoint: typeof endpoint === 'string' ? endpoint : null,
     })
+  }
+
+  /**
+   * Persist one record's current truth.
+   *
+   * The store contract already swallows its failures; the try/catch here is
+   * only a belt so a misbehaving foreign implementation cannot reach the
+   * capture path either. Uncorrelated records carry no live identity to
+   * check — only a correlated write passes one.
+   */
+  #persist(record: ReviewRecord): void {
+    try {
+      const identity = record.correlation === undefined
+        ? undefined
+        : this.#identityFor(record.correlation.sessionId)
+      this.#history?.upsert(record, identity)
+    } catch {
+      // Persistence is a bypass: nothing it does may touch capture.
+    }
+  }
+
+  /** The live session's header triple for lifecycle validation, when readable. */
+  #identityFor(sessionId: string): ReviewSessionIdentity | undefined {
+    try {
+      const header = this.#sessions.get(sessionId as SessionId)?.header
+      if (header === undefined) return undefined
+      return {
+        createdAt: header.createdAt,
+        isSeeded: header.isSeeded,
+        ...(header.cwd === undefined ? {} : { cwd: header.cwd }),
+      }
+    } catch {
+      return undefined
+    }
+  }
+
+  /**
+   * Memory + persisted summaries for one `list` call, merged newest-first.
+   * Memory answers first and wins every id dedupe — its records are the live
+   * ones. `before`/`limit` then page the merged order.
+   */
+  async #mergedSummaries(sessionId: string): Promise<readonly ReviewRecordSummary[]> {
+    const memory = this.buffer.summaries(sessionId)
+    const history = this.#history
+    if (history === undefined) return memory
+    let persisted: readonly ReviewRecordSummary[]
+    try {
+      persisted = await history.summaries(sessionId, this.#identityFor(sessionId))
+    } catch {
+      return memory
+    }
+    if (persisted.length === 0) return memory
+    const seen = new Set(memory.map(summary => summary.id))
+    const merged = [...memory]
+    for (const summary of persisted) {
+      if (!seen.has(summary.id)) {
+        seen.add(summary.id)
+        merged.push(summary)
+      }
+    }
+    return merged.sort(compareSummariesDesc)
+  }
+
+  /** The persisted copy of one id, or `undefined`. */
+  async #persistedGet(sessionId: string | undefined, id: string): Promise<ReviewRecord | undefined> {
+    const history = this.#history
+    if (history === undefined) return undefined
+    try {
+      return await history.get(sessionId, id, sessionId === undefined ? undefined : this.#identityFor(sessionId))
+    } catch {
+      return undefined
+    }
+  }
+
+  /**
+   * Wipe history completely: the persisted logs AND the in-memory rings plus
+   * every index that could repoint into them. The `clear` endpoint calls
+   * this — removing only the files would let the next `list` resurrect the
+   * records the user just asked to delete.
+   * @returns what the store removed.
+   */
+  async clearHistory(): Promise<ReviewHistoryClearResult> {
+    this.buffer.clear()
+    this.#recordByCall.clear()
+    this.#approvals.clear()
+    this.#pendingOutcomes.clear()
+    this.#ambiguousRecords.clear()
+    this.#inFlight.clear()
+    if (this.#history === undefined) {
+      return { removedSessions: 0, removedBytes: 0 }
+    }
+    return this.#history.clear()
+  }
+
+  /** Drain one session's write queues — the `session/flush` barrier's body. */
+  async flushPersistence(sessionId: string): Promise<void> {
+    await this.#history?.flush(sessionId)
+  }
+
+  /** Drain every write queue; called at service disposal. */
+  async closePersistence(): Promise<void> {
+    await this.#history?.close()
+  }
+
+  /** `stats` never fails: an absent or throwing store reports memory-only. */
+  async #safeStats(): Promise<PanelStatsValue> {
+    const history = this.#history
+    if (history === undefined) {
+      return { available: false, settings: DEFAULT_RETENTION, sessions: 0, bytes: 0 }
+    }
+    try {
+      return await history.stats()
+    } catch {
+      return { available: false, settings: DEFAULT_RETENTION, sessions: 0, bytes: 0 }
+    }
   }
 
   /** Build the `list` status block. */
@@ -342,10 +601,30 @@ export class ReviewCaptureHost {
     const reviewerAvailable = this.#reviewerAvailable()
     const sessionPreset = sessionId === undefined ? undefined : this.#sessionPreset(sessionId)
     const reviewerPackage = this.#reviewerPackage()
+    const tools = this.#toolNames(sessionId)
     return {
       reviewerAvailable,
       ...(sessionPreset === undefined ? {} : { sessionPreset }),
       ...(reviewerPackage === undefined ? {} : { reviewerPackage }),
+      ...(tools === undefined ? {} : { tools }),
+    }
+  }
+
+  /**
+   * The tool names the session's agent can see, read from the live registry.
+   * The reserved `run_code` transport is excluded: the reviewer skips it, so
+   * an option for it could never match a record.
+   */
+  #toolNames(sessionId: string | undefined): readonly string[] | undefined {
+    if (sessionId === undefined || this.#listToolNames === undefined) return undefined
+    try {
+      const names = new Set<string>()
+      for (const name of this.#listToolNames(sessionId)) {
+        if (name.length > 0 && name !== this.#runCodeName) names.add(name)
+      }
+      return [...names].sort((left, right) => left.localeCompare(right))
+    } catch {
+      return undefined
     }
   }
 
@@ -458,10 +737,13 @@ export class ReviewCaptureHost {
       // The approval pair is appended *before* `next()` resolves — evidence
       // collected under this callKey merges into the fresh anchor.
       const pending = this.#pendingOutcomes.get(callKey(tracked.sessionId, tracked.callId))
+      const record = pending === undefined
+        ? correlated
+        : this.buffer.attachHostOutcome(correlated.id, pending) ?? correlated
       if (pending !== undefined) {
         this.#pendingOutcomes.delete(callKey(tracked.sessionId, tracked.callId))
-        this.buffer.attachHostOutcome(correlated.id, pending)
       }
+      this.#persist(record)
     }
   }
 
@@ -525,7 +807,8 @@ export class ReviewCaptureHost {
       this.#recordByCall.delete(key)
       return
     }
-    this.buffer.attachHostOutcome(id, patch(record.hostOutcome ?? {}))
+    const updated = this.buffer.attachHostOutcome(id, patch(record.hostOutcome ?? {}))
+    if (updated !== undefined) this.#persist(updated)
   }
 
   /** The `tool/result` event carries the durable outcome of one call. */

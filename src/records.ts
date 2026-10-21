@@ -46,10 +46,14 @@ function ringCapacity(value: number | undefined, fallback: number): number {
 
 /**
  * Recursively freeze one plain JSON value.
+ *
+ * Exported for the history store: records folded back from disk pass through
+ * the same freeze before they leave persistence, keeping the "records are
+ * immutable everywhere" invariant the buffer established.
  * @param value - the value to freeze in place.
  * @returns the same value, frozen through every nested object and array.
  */
-function deepFreeze<T>(value: T): T {
+export function deepFreeze<T>(value: T): T {
   if (value === null || typeof value !== 'object' || Object.isFrozen(value)) return value
   for (const key of Object.keys(value)) {
     deepFreeze((value as Record<string, unknown>)[key])
@@ -241,6 +245,15 @@ export class ReviewRecordBuffer {
   /** Number of correlated records held for one session. */
   sessionSize(sessionId: string): number {
     return this.#records.filter(record => record.correlation?.sessionId === sessionId).length
+  }
+
+  /**
+   * Drop every record. Called by `clearHistory` alongside the persisted
+   * wipe — a cleared history must empty the live ring too, or the next
+   * `list` would resurface records the user just removed.
+   */
+  clear(): void {
+    this.#records.length = 0
   }
 
   /** Drop the oldest records until the global cap holds. */

@@ -119,8 +119,14 @@ describe('host-service package inspection', () => {
     }
   })
 
-  it('keeps the runtime-optional bucket empty while no optional peer is imported at run time', () => {
-    expect(RUNTIME_OPTIONAL_PACKAGES).toEqual([])
+  it('holds only genuinely plugin-loaded optionals in the runtime-optional bucket', () => {
+    // The history store dynamically imports its two storage peers; their own
+    // resolved copy is what the plugin executes, so they testify from here —
+    // and nothing else may.
+    expect(RUNTIME_OPTIONAL_PACKAGES).toEqual([
+      '@deepseek-ai/dsh-atomic-write',
+      '@deepseek-ai/dsh-home-paths',
+    ])
   })
 
   it('does not let a private dsh-llm copy testify — the plugin never imports it at run time', () => {

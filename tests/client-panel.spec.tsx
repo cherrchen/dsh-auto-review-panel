@@ -75,9 +75,22 @@ function record(overrides: Partial<ReviewRecord> = {}): ReviewRecord {
 function listValue(overrides: Partial<PanelListValue> = {}): PanelListValue {
   return {
     records: [summary()],
-    status: { reviewerAvailable: true, sessionPreset: 'auto', reviewerPackage: '@deepseek-ai/dsh-experimental-auto-review' },
+    status: {
+      reviewerAvailable: true,
+      sessionPreset: 'auto',
+      reviewerPackage: '@deepseek-ai/dsh-experimental-auto-review',
+      tools: ['bash', 'glob', 'read', 'write'],
+    },
+    page: { hasMore: false },
     ...overrides,
   }
+}
+
+/** One UTC instant as the local wall-clock value a datetime-local input carries. */
+function localInput(iso: string): string {
+  const date = new Date(iso)
+  const pad = (value: number): string => String(value).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 
 /** Dictionary-driven translate for copy assertions. */
@@ -164,6 +177,7 @@ function renderPane(harness: ReturnType<typeof mount>, sessionId: SessionId = SE
       useRecords: (selector: (value: unknown) => unknown) => selector(snapshot),
       getRecord: face['getRecord'],
       refresh: face['refresh'],
+      loadOlder: face['loadOlder'],
       t: harness.dict,
     })
   }
@@ -189,6 +203,22 @@ describe('two-stage mount', () => {
       key: '@dsh-electron/dsh-auto-review-panel',
       locale: 'auto-review-panel',
     })
+  })
+
+  it('registers the bundle configuration entry under the package key', () => {
+    const harness = mount()
+    const bundle = harness.registrations.find(entry => entry.options.name === 'plugins.bundle.config')
+    expect(bundle?.options).toMatchObject({
+      name: 'plugins.bundle.config',
+      key: '@dsh-electron/dsh-auto-review-panel',
+      locale: 'auto-review-panel',
+    })
+    // The row detail page carries no configuration entry.
+    expect(harness.registrations.some(entry => entry.options.name === 'plugins.row.config')).toBe(false)
+    // The summary view answers with the localized one-liner, no channel needed.
+    const face = bundle?.options.inject?.(SESSION)
+    const node = bundle?.component({ view: 'summary', ...(face ?? {}), t: harness.dict })
+    expect(node).toBe(zh['settings.summary'])
   })
 
   it('mounts About and refresh as icon buttons at the header right', async () => {
@@ -283,6 +313,50 @@ describe('the five-field list row', () => {
     await waitFor(() => expect(container.querySelectorAll('.arp-row')).toHaveLength(1))
     expect(container.querySelector('.arp-row-name')?.textContent).toBe('rm')
   })
+
+  it('filters by the host registry tool list, not the captured rows', async () => {
+    const harness = mount({
+      list: () => listValue({
+        records: [
+          summary({ id: 'r1', action: { name: 'read', mode: 'native', preview: 'a.md' } }),
+          summary({ id: 'r2', action: { name: 'bash', mode: 'native', preview: 'ls' } }),
+          summary({ id: 'r3', action: { name: 'bash', mode: 'native', preview: 'pwd' } }),
+        ],
+      }),
+    })
+    const { container } = renderPane(harness)
+    await screen.findByText('read')
+    fireEvent.click(screen.getByText(zh['filter.tool']))
+    // `glob` appears in the host status but in no row — the registry is the source.
+    expect(screen.getByRole('menuitem', { name: 'glob' })).toBeTruthy()
+    expect(screen.getByRole('menuitem', { name: 'write' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('menuitem', { name: 'bash' }))
+    await waitFor(() => expect(container.querySelectorAll('.arp-row')).toHaveLength(2))
+    expect([...container.querySelectorAll('.arp-row-name')].map(node => node.textContent)).toEqual(['bash', 'bash'])
+  })
+
+  it('filters by the review time range and clears it', async () => {
+    const harness = mount({
+      list: () => listValue({
+        records: [
+          summary({ id: 'early', capturedAt: '2026-10-20T08:00:00.000Z', action: { name: 'read', mode: 'native' } }),
+          summary({ id: 'middle', capturedAt: '2026-10-20T10:00:00.000Z', action: { name: 'write', mode: 'native' } }),
+          summary({ id: 'late', capturedAt: '2026-10-20T12:00:00.000Z', action: { name: 'bash', mode: 'native' } }),
+        ],
+      }),
+    })
+    const { container } = renderPane(harness)
+    await screen.findByText('read')
+    const from = screen.getByLabelText(zh['filter.time.fromAria'])
+    const to = screen.getByLabelText(zh['filter.time.toAria'])
+    fireEvent.change(from, { target: { value: localInput('2026-10-20T09:00:00.000Z') } })
+    await waitFor(() => expect(container.querySelectorAll('.arp-row')).toHaveLength(2))
+    fireEvent.change(to, { target: { value: localInput('2026-10-20T11:00:00.000Z') } })
+    await waitFor(() => expect(container.querySelectorAll('.arp-row')).toHaveLength(1))
+    expect(container.querySelector('.arp-row-name')?.textContent).toBe('write')
+    fireEvent.click(screen.getByLabelText(zh['filter.time.clear']))
+    await waitFor(() => expect(container.querySelectorAll('.arp-row')).toHaveLength(3))
+  })
 })
 
 describe('the four empty states', () => {
@@ -324,7 +398,7 @@ describe('the detail view', () => {
   it('fetches the record and shows the overview card plus the tab switcher', async () => {
     const harness = mount()
     const { container } = await openDetail(harness)
-    expect(harness.calls.find(call => call.endpoint === 'get')?.payload).toEqual({ id: 'r1' })
+    expect(harness.calls.find(call => call.endpoint === 'get')?.payload).toEqual({ id: 'r1', sessionId: 'session-1' })
     const overview = container.querySelector('.arp-overview')!
     expect(overview.textContent).toContain('deepseek/deepseek-chat')
     expect(overview.textContent).toContain('2026-10-20T12:00:00.000Z')

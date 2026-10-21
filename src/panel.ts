@@ -20,6 +20,7 @@ import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
 import { RUN_CODE_NAME, type PreToolDecision, type ToolExecution } from '@deepseek-ai/dsh-tools'
 import type {} from './compat.ts'
 import { mountPanelChannel } from './channel.ts'
+import { LazyReviewHistory } from './history/lazy.ts'
 import { ReviewCaptureHost, type ReviewExecutionLike } from './host.ts'
 
 declare module '@deepseek-ai/cordis' {
@@ -39,8 +40,25 @@ export default class AutoReviewPanelService extends Service {
   /** The capture core; exposed for diagnostics and for the M2 client seam. */
   readonly host: ReviewCaptureHost
 
+  /**
+   * The lazy persistence seam: the store opens on first write/read, and a
+   * composition where the history root cannot be used simply runs
+   * memory-only — `boot()` itself can never fail over storage.
+   */
+  readonly history: LazyReviewHistory
+
   constructor(ctx: Context) {
     super(ctx, 'autoReviewPanel')
+    const history = new LazyReviewHistory({
+      warn: message => {
+        try {
+          ctx.logger.warn(message)
+        } catch {
+          // A logger failure must not be the reason a write queue stalls.
+        }
+      },
+    })
+    this.history = history
     this.host = new ReviewCaptureHost({
       permissionPresets: ctx.permissionPresets,
       sessions: ctx.sessions,
@@ -62,7 +80,31 @@ export default class AutoReviewPanelService extends Service {
           return []
         }
       },
+      // Both services are optional peers, so they are read through `ctx.get`
+      // rather than `inject`: a composition without a tool registry keeps the
+      // panel row mounted, it just offers no registry tool options. The
+      // session's agent scopes the view, so restrictions and scoped
+      // registrations resolve exactly as the model sees them.
+      listToolNames: sessionId => {
+        const tools = ctx.get('tools') as {
+          schemas(scope?: unknown): readonly { readonly name: string }[]
+        } | undefined
+        if (tools === undefined) return []
+        const agents = ctx.get('agents') as { get(id: string): unknown } | undefined
+        return tools.schemas(agents?.get(sessionId)).map(schema => schema.name)
+      },
+      history: this.history,
     })
+
+    // `session/flush` is the awaited durability checkpoint: returning the
+    // drain promise makes the session's flush barrier cover the store's
+    // write queues, so a clean session teardown never abandons a queued
+    // append. A hard kill can still lose the last unflushed window — the
+    // documented limit of an append-only side channel.
+    ctx.on('session/flush', (session: Session) => this.host.flushPersistence(String(session.id)))
+
+    // Dispose drains the queues so a controlled shutdown lands every write.
+    ctx.effect(() => () => this.host.closePersistence())
 
     // Both observation listeners use the default append position: the
     // `llm/stream` tee only records while forwarding every chunk and error

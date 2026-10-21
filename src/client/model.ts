@@ -8,11 +8,18 @@
 
 import type { PanelListValue, PanelStatus, ReviewDecision, ReviewRecord, ReviewRecordSummary, ReviewRisk } from '../contract.ts'
 
-/** What the polling source last observed over the channel. */
+/**
+ * What the polling source last observed over the channel.
+ *
+ * `live` on a ready snapshot is the paging state: `true` while the source
+ * polls the newest page on its interval, `false` once `loadOlder` walked
+ * into history and paused the refresh — the deliberate trade that keeps the
+ * cursor boundary from drifting under a paging user.
+ */
 export type PanelSnapshot =
   | { readonly phase: 'loading' }
   | { readonly phase: 'failed' }
-  | { readonly phase: 'ready'; readonly value: PanelListValue }
+  | { readonly phase: 'ready'; readonly value: PanelListValue; readonly live: boolean }
 
 /** The four empty states, named by the requirement's numbering. */
 export type EmptyState = 'reviewer-unavailable' | 'not-auto' | 'channel-missing' | 'no-records'
@@ -25,10 +32,19 @@ export type VerdictChip = 'allow' | 'deny' | 'error' | 'failed'
  * value is among the chosen options, and an unset or empty set filters
  * nothing. A record the host left without the field matches no chosen
  * option — an absent field stays absent, never counted as a match.
+ *
+ * `from`/`to` are `<input type="datetime-local">` values (local wall-clock,
+ * no zone), converted to absolute instants only while filtering. Bounds are
+ * inclusive; an unparsable bound filters nothing, and a record whose
+ * `capturedAt` cannot be parsed never matches an active range.
  */
 export interface ListFilters {
   readonly risk?: readonly ReviewRisk[]
   readonly decision?: readonly ReviewDecision[]
+  /** Exact `action.name` values; options come from the records actually listed. */
+  readonly tool?: readonly string[]
+  readonly from?: string
+  readonly to?: string
 }
 
 /** The Auto preset identity, mirroring the host's AUTO_PRESET. */
@@ -59,27 +75,35 @@ export function reasonOf(summary: ReviewRecordSummary): string | undefined {
 /**
  * Pick the empty state, or undefined when records may render.
  *
- * Order matters: a missing channel outranks reviewer availability (nothing
- * else can be read), and a session that is not Auto outranks "no records"
- * only while the host could say so — an absent `sessionPreset` falls into
- * `no-records`, as the contract requires.
+ * Order matters since M4: records in hand outrank every availability state —
+ * persisted history renders even when the reviewer is currently absent or
+ * this session no longer runs Auto. Only a truly record-free answer falls
+ * through to the availability checks: a missing channel outranks reviewer
+ * availability (nothing else can be read), and a session that is not Auto
+ * outranks "no records" only while the host could say so — an absent
+ * `sessionPreset` falls into `no-records`, as the contract requires.
  * @param snapshot - the last channel observation.
  * @returns the empty state to show.
  */
 export function emptyStateOf(snapshot: PanelSnapshot): EmptyState | undefined {
   if (snapshot.phase === 'failed') return 'channel-missing'
   if (snapshot.phase !== 'ready') return undefined
+  if (snapshot.value.records.length > 0) return undefined
   const status: PanelStatus = snapshot.value.status
   if (!status.reviewerAvailable) return 'reviewer-unavailable'
   if (status.sessionPreset !== undefined && status.sessionPreset !== AUTO_PRESET_NAME) return 'not-auto'
-  if (snapshot.value.records.length === 0) return 'no-records'
-  return undefined
+  return 'no-records'
 }
 
 /** The two display groups: this session's correlated records, then the always-visible uncorrelated batch. */
 export interface RecordGroups {
   readonly correlated: readonly ReviewRecordSummary[]
   readonly uncorrelated: readonly ReviewRecordSummary[]
+}
+
+/** One `datetime-local` value as an absolute instant; NaN when unset or malformed. */
+function instantOf(value: string | undefined): number {
+  return value === undefined || value === '' ? Number.NaN : new Date(value).getTime()
 }
 
 /**
@@ -90,11 +114,22 @@ export interface RecordGroups {
  * @returns the two groups, each still newest first.
  */
 export function groupSummaries(records: readonly ReviewRecordSummary[], filters: ListFilters = {}): RecordGroups {
+  const from = instantOf(filters.from)
+  const to = instantOf(filters.to)
+  const passTime = (capturedAt: string): boolean => {
+    if (Number.isNaN(from) && Number.isNaN(to)) return true
+    const instant = new Date(capturedAt).getTime()
+    if (Number.isNaN(instant)) return false
+    return (Number.isNaN(from) || instant >= from) && (Number.isNaN(to) || instant <= to)
+  }
   const pass = (record: ReviewRecordSummary): boolean =>
     (filters.risk === undefined || filters.risk.length === 0
       || (record.risk !== undefined && filters.risk.includes(record.risk)))
     && (filters.decision === undefined || filters.decision.length === 0
       || (record.decision !== undefined && filters.decision.includes(record.decision)))
+    && (filters.tool === undefined || filters.tool.length === 0
+      || (record.action.name !== undefined && filters.tool.includes(record.action.name)))
+    && passTime(record.capturedAt)
   return {
     correlated: records.filter(record => record.correlated && pass(record)),
     uncorrelated: records.filter(record => !record.correlated && pass(record)),
