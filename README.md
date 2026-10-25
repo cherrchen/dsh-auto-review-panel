@@ -25,11 +25,11 @@ DSH（DeepSeek Harness）的 Auto 权限预设由 Auto Review 审查器在后台
 
 | DSH 系列 | 受支持的版本 |
 | --- | --- |
-| `0.2.1` | `0.2.1-rc.2` |
+| `0.2.1` | `0.2.1-rc.2`, `0.2.1-rc.3` |
 
 DSH 版本不在表内、或 `@deepseek-ai/dsh-*` 各包版本不一致时，插件不会启动，行为等同没装。
 
-**从源码构建 / 贡献**：Node.js `^22.19.0 || >=24`，pnpm `11.25.0`（建议经 corepack 启用）；开发 pin 的 DSH 为 `0.2.1-rc.2`。
+**从源码构建 / 贡献**：Node.js `^22.19.0 || >=24`，pnpm `11.25.0`（建议经 corepack 启用）；开发 pin 的 DSH 为 `0.2.1-rc.3`。
 
 **运行平台**：macOS、Linux、Windows——面板是 UI 面，无平台特定执行语义；Windows CI 腿默认停放，面板出现平台相关行为时再由仓库变量 `DSH_WINDOWS_CI` 启用。
 
@@ -49,7 +49,7 @@ dsh plugin --profile web add /path/to/repo
 > [!TIP]
 > `dsh` 不在 PATH 里时（例如用源码仓库跑 DSH），把命令里的 `dsh` 换成 `pnpm dsh`。
 
-**前置条件**：本插件只观察已有审查器的裁决，自身不审查。要看到内容，需先在插件管理器启用官方 `@deepseek-ai/dsh-experimental-auto-review`（它随安装附带、默认关闭）；若当前安装未附带，再显式安装精确版 `0.2.1-rc.2`，勿用滞后的 `latest`，并让会话选择 Auto preset——两者缺一，面板将恒为空。
+**前置条件**：本插件只观察已有审查器的裁决，自身不审查。要看到内容，需先在插件管理器启用官方 `@deepseek-ai/dsh-experimental-auto-review`（它随安装附带、默认关闭）；若当前安装未附带，再显式安装与宿主 DSH 一致的精确版本，勿用滞后的 `latest`，并让会话选择 Auto preset——两者缺一，面板将恒为空。
 
 ## 运行方法
 

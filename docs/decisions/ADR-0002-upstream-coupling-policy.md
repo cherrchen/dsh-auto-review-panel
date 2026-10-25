@@ -22,7 +22,7 @@ Accepted
 
 1. **只允许包入口导入**。禁止引用任何 `pkg/src/*` 路径（无论本机是否能解析成功）；需要上游内部实现时，按"本地实现 + 文件头注明来源 commit 与复制范围 + 差分测试钉住"的方式落地。
 2. **运行时依赖声明为 peerDependencies**（`@deepseek-ai/cordis`、`@deepseek-ai/dsh-*`），由宿主提供单一份实例；插件不打包、不自带这些包的副本。cordis 的 peer 范围按 dsh 声明的精确版本对齐，不使用宽范围。
-3. **精确 pin 开发/CI 版本**：`devDependencies` 固定一个确切版本（当前 `0.2.1-rc.2`），不使用 `latest` 或宽范围。
+3. **精确 pin 开发/CI 版本**：`devDependencies` 固定一个确切版本（当前基线见[开发工作流](../development/plugin-development-workflow.md#1-目标运行时与版本策略)），不使用 `latest` 或宽范围。
 4. **建立升级门禁**：组合 dump 差分断言（`smoke:compose`）+ 打包完整性（`pack:check` + `smoke:packed`）+ `compat:check` 静态门禁构成升级 smoke；改动 pin 后必须重跑，任一差异即报警。
 5. **面板不复制上游裁决逻辑**。Auto Review 的策略、快照与生命周期语义无公开接口；面板只经支持的接缝观察（见[上游调研](../reference/upstream-auto-review.md)），读不到就不显示，绝不本地重造 reviewer。
 

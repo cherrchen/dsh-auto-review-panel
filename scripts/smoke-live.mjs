@@ -3,8 +3,8 @@
  *
  * Boots a REAL composed `web` profile in-process — the upstream base and
  * web-app bundles, the official `@deepseek-ai/dsh-experimental-auto-review`
- * (npm `next`, pinned at 0.2.1-rc.2), and this plugin installed through the
- * real `dsh plugin add` chain — then drives real `tools.execute` calls
+ * (pinned to the exact runtime release under test), and this plugin installed
+ * through the real `dsh plugin add` chain — then drives real `tools.execute` calls
  * through a scripted LLM adapter. The adapter only makes the reviewer's
  * verdict deterministic; every seam the panel depends on is the shipped one:
  * the real `llm/stream` waterfall, the real `tools/pre-execute` listener
@@ -22,6 +22,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync }
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createChecker } from './lib/check.mjs'
+import { npmOutput } from './lib/npm-cli.mjs'
 import { bootProfile } from './lib/profile-boot.mjs'
 import { removeScratchTree } from './lib/smoke-cleanup.mjs'
 import {
@@ -32,10 +33,11 @@ import {
   loadRuntimeModule,
   resolveScratchHome,
   runDsh,
+  runtimeRequire,
 } from './lib/dsh-runtime.mjs'
 
 const OFFICIAL = '@deepseek-ai/dsh-experimental-auto-review'
-const EXPECTED_RELEASE = '0.2.1-rc.2'
+const EXPECTED_RELEASE = runtimeRequire()('@deepseek-ai/dsh/package.json').version
 const PROFILE = 'arp-live'
 
 const check = createChecker('live')
@@ -64,9 +66,9 @@ try {
   const app = await loadAppBoot()
   const dir = join(home, 'profiles', PROFILE)
 
-  // `npm next` is the experimental channel — `latest` intentionally trails.
-  const next = (await captureDshPkg()).trim()
-  check.equal(next, EXPECTED_RELEASE, `npm dist-tag next resolves to ${EXPECTED_RELEASE}`, next)
+  // Resolve an exact release: moving dist-tags must not invalidate older matrix legs.
+  const published = JSON.parse(npmOutput(['view', `${OFFICIAL}@${EXPECTED_RELEASE}`, 'version', '--json']))
+  check.equal(published, EXPECTED_RELEASE, `official reviewer ${EXPECTED_RELEASE} is published`, published)
 
   app.initProfile(dir, ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app'])
   ensureProfileCopyImport(home, PROFILE)
@@ -477,19 +479,4 @@ try {
 } finally {
   if (!keep) await removeScratchTree(home)
   else console.log(`[smoke:live] kept scratch home at ${home}`)
-}
-
-/** Resolve the npm `next` dist-tag of the official reviewer package. */
-async function captureDshPkg() {
-  const { spawn } = await import('node:child_process')
-  const child = spawn(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['view', `${OFFICIAL}@next`, 'version'], { stdio: ['ignore', 'pipe', 'pipe'] })
-  let stdout = ''
-  child.stdout.setEncoding('utf8')
-  child.stdout.on('data', chunk => { stdout += chunk })
-  const code = await new Promise((settle, fail) => {
-    child.on('error', fail)
-    child.on('close', value => settle(value ?? 1))
-  })
-  if (code !== 0) throw new Error(`npm view ${OFFICIAL}@next exited ${code}`)
-  return stdout
 }

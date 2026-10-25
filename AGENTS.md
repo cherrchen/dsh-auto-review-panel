@@ -129,4 +129,4 @@ Details live in `docs/development/plugin-development-workflow.md`; when the two 
 - Never modify any package in the upstream repository (deepseek-harness). All deliverables are out-of-tree, installed through `dsh plugin add` or composed via the bundle patch.
 - Import only through package entry points. Never deep-import `pkg/src/*`: the published tarballs do not ship those files (see `docs/decisions/ADR-0002-upstream-coupling-policy.md`).
 - `@deepseek-ai/dsh*` packages are `peerDependencies` at exact allowlisted versions — the host provides the single copy the plugin runs against.
-- The DSH development pin is `0.2.1-rc.2`; the allowlist is `src/compat/dsh-version.ts`'s `SUPPORTED_DSH_RELEASES`.
+- The DSH development pin is `0.2.1-rc.3`; the allowlist is `src/compat/dsh-version.ts`'s `SUPPORTED_DSH_RELEASES`.

@@ -82,6 +82,17 @@
 - **如实边界**：硬杀最多丢最后一个 flush 屏障前的写窗口；单文件自身超总量上限保留并回报 warning 不截断；外国 schema 文件永不覆写——未来升级格式需读侧先懂；无"关闭持久化"开关（面板读历史走同一路径）。
 - **验证**：`vitest run` 9 文件 172 通过 1 跳过（`review-history.spec.ts` 24 项：JSONL 往返、header 身份校验、stale/corrupt/foreign 处理、unassigned tombstone 与压实、留存三轴、clear/flush/close、分页游标稳定性；`review-channel.spec.ts` 扩到 stats/update-settings/clear 与分页形状；`source.spec.ts` 分页状态机与竞态；`client-panel.spec.tsx` loadOlder/footer/暂停提示；`client-bundle.spec.ts` plugin-manager 注入声明；`compat.spec.ts` runtime-optional 分区）。`smoke:live` 实测持久化断言：文件落盘、stats/settings 端点经 wire、清理生效、**重启恢复**（同 `$DSH_HOME` 的 plain profile——无 reviewer——仍能列出完整历史含未关联组）。`pnpm verify:all` + `compat:check` + `docs:check` 全绿。
 
+## 兼容性验收记录
+
+### 2026-10-25：rc.3 支持提升
+
+- 开发基线提升至 `0.2.1-rc.3`，保留原有 rc.2 支持；精确支持清单仍以 [`SUPPORTED_DSH_RELEASES`](../../../src/compat/dsh-version.ts) 为唯一真源。peer 声明、开发依赖、lockfile 与 release-age 精确条目同步更新，cordis 保持 `4.0.5`。
+- 上游接缝复核见[Auto Review 调研补充](../../reference/upstream-auto-review.md#rc3-复核2026-10-25)。无新增运行时适配分支；`smoke:live` 改为从实际 CLI 运行时解析 DSH 精确版本，安装同版本官方 reviewer，避免 npm `next` 移动使旧版回归失效。
+- rc.3 在候选车道通过完整验证后，以正式 enforce 门禁重跑：`pnpm compat:check`、`pnpm verify:all` 全部通过（9 个测试文件，174 通过 / 1 个候选车道专用测试跳过；源码与 packed 组合各 17 项通过）；`pnpm smoke:live` 69/69，通过真实 reviewer 的 allow、deny+ask、deny+never、故障、空态、持久化、清理与重启恢复。
+- rc.2 回归在隔离源码副本中经 `node scripts/upgrade-dsh.mjs 0.2.1-rc.2` 重建统一安装树，以正式 enforce 门禁跑 `pnpm compat:check`、`pnpm verify:all` 与 `pnpm smoke:live`：同样 174 通过 / 1 跳过、源码与 packed 组合各 17 项通过、实时验收 69/69。隔离副本已清理，主工作区依赖未切回旧版。
+- 本地验证平台为 macOS arm64 / Node.js `24.18.0`；Linux、Windows 与浏览器人工交互未在本次本地验收覆盖。CI 继续从支持清单派生版本矩阵；Windows 腿仍按原有开关控制。
+- 主工作区已移除候选 probe overrides，保持 rc.3 开发基线；本次不创建发布 tag。
+
 ## 里程碑纪律
 
 - 每个 M 有对应的 `plans/active|completed/YYYY-MM-DD-mN-*.md`；完成即迁移到 `completed/` 并在本表标注"随 `vX.Y.Z` 发版"。

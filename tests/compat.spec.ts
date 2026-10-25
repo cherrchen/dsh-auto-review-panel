@@ -49,6 +49,13 @@ describe('the supported release list', () => {
     }
   })
 
+  it.each(SUPPORTED_DSH_RELEASES)('accepts a coherent installation of %s', (release) => {
+    const report = classifyInstallation(reader(release))
+    expect(report.verdict).toBe('supported')
+    expect(report.release).toBe(release)
+    expect(() => assertSupportedInstallation(report, 'enforce')).not.toThrow()
+  })
+
   it('has no duplicate entries', () => {
     expect([...new Set(SUPPORTED_DSH_RELEASES)]).toEqual([...SUPPORTED_DSH_RELEASES])
   })

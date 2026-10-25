@@ -10,7 +10,7 @@ Auto 权限预设下，每一次工具执行都先经 Auto Review 审查器裁�
 
 这套裁决的**过程与依据对使用者完全不可见**：审查请求不进 Session 日志（上游源码注释原话："This review prompt is sent only through ctx.llm.stream and never enters a Session log"），轨迹里只有工具卡的最终结果，开发者信息面板（`@deepseek-ai/dsh-experimental-inspector-profile` 组合的 session-inspector）也读不到审查上下文与裁决。放行无声无息，拒绝只剩一条 `AUTO_REVIEW_DENIED` 错误码。使用者无法回答：审查器刚才看到了什么？按什么依据判的？为什么这次拒绝/放行？
 
-**前置条件**：官方 `@deepseek-ai/dsh-experimental-auto-review` bundle 已启用（它随安装附带、默认关闭，主路径是在插件管理器直接启用附带版本；当前安装未附带时才显式安装精确版 `0.2.1-rc.2`——npm 上 `latest` 滞后勿用），且会话使用 Auto preset——两个前提缺一，审查器根本不存在，面板天然无数据。
+**前置条件**：官方 `@deepseek-ai/dsh-experimental-auto-review` bundle 已启用（它随安装附带、默认关闭，主路径是在插件管理器直接启用附带版本；当前安装未附带时才显式安装与宿主 DSH 一致的精确版本——npm 上 `latest` 滞后勿用），且会话使用 Auto preset——两个前提缺一，审查器根本不存在，面板天然无数据。
 
 本插件补足这块可视化：在 `sidebar.right` 注入一个面板 tab（形态对齐 session-inspector），按条检索、阅读每一次 auto-review 的**上下文、裁决与依据**，同时：
 
@@ -135,7 +135,7 @@ Auto 权限预设下，每一次工具执行都先经 Auto Review 审查器裁�
 - `session/flush` 屏障排空该会话写队列；`stats`/`update-settings`/`clear` 端点形状与验收语义一致（负数留存 `bad-request`、`clear` 缺 `confirm:true` `bad-request`、无持久化 `persistence-unavailable`）。
 - `stats.location` 为符号化拼写不泄绝对路径；`update-settings` 后立即 `maintain()`；`clear` 删历史文件与内存记录、`settings.json` 保留。
 - 持久化不可用（根目录不可写等）时捕获/关联/裁决链不受影响；分页 `before` 游标翻页稳定、无重复 id；加载更早期间轮询暂停、刷新恢复。
-- 真实组合验收使用 `@deepseek-ai/dsh-experimental-auto-review@0.2.1-rc.2`（npm `next`，**不要用 latest**——它停在旧版）。
+- 真实组合验收使用与实际宿主 DSH 一致的精确版本 `@deepseek-ai/dsh-experimental-auto-review`，不依赖会移动的 npm dist-tag。
 - `pnpm verify:all` + `pnpm compat:check` + `pnpm docs:check` 全绿；`smoke:compose`/`smoke:packed` 通过。
 
 ## 7. 开放问题

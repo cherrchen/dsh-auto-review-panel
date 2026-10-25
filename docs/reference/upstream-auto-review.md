@@ -7,9 +7,15 @@
 | 对象 | 本次核对基线 |
 | --- | --- |
 | 上游 | `dsh-v0.2.1-rc.2`，commit `687f282e8625c6b8d11ff58211a90524be2e4317` |
-| 已安装运行时 | 本仓库 devDependencies pin `0.2.1-rc.2`，从 `@deepseek-ai/dsh/package.json` 锚定解析的 tools、llm、permission-presets、session、agent 均为 `0.2.1-rc.2` |
+| 已安装运行时 | 调研时本仓库 devDependencies pin `0.2.1-rc.2`，从 `@deepseek-ai/dsh/package.json` 锚定解析的 tools、llm、permission-presets、session、agent 均为 `0.2.1-rc.2` |
 
 上游源码链接均固定到该 commit。
+
+## rc.3 复核（2026-10-25）
+
+对比上游 `dsh-v0.2.1-rc.2` 与 `dsh-v0.2.1-rc.3`（commit `1f81c047fc48fa190a683e469daa699857e9afe8`）：`packages/experimental/auto-review` 仅包版本变化，源码与测试未改，以下审查语义仍适用。插件依赖的 tools、llm、permission-presets、session 与历史存储接缝没有实现变化；客户端侧栏新增菜单/固定项能力，plugin-manager 新增 `pluginNavigation.openList()`，本插件使用的 tab 注册、`sidebar.right.pane.tab` 与 `plugins.bundle.config` 接缝保持兼容，无需新增版本分支。
+
+当前支持版本以 [`SUPPORTED_DSH_RELEASES`](../../src/compat/dsh-version.ts) 为准；验证结果见[路线图兼容性验收记录](../plans/completed/2026-10-20-auto-review-panel.md#兼容性验收记录)。
 
 ## 审查入口与生命周期
 

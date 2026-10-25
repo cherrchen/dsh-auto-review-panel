@@ -25,11 +25,11 @@ The first release `v0.1.0` is ready: review-record capture, host-outcome evidenc
 
 | DSH line | Supported releases |
 | --- | --- |
-| `0.2.1` | `0.2.1-rc.2` |
+| `0.2.1` | `0.2.1-rc.2`, `0.2.1-rc.3` |
 
 When the host's DSH release is not listed, or `@deepseek-ai/dsh-*` packages disagree on a version, the plugin does not start and behaves exactly as if it were not installed.
 
-**Building from source / contributing**: Node.js `^22.19.0 || >=24`, pnpm `11.25.0` (enable via corepack); the development pin is DSH `0.2.1-rc.2`.
+**Building from source / contributing**: Node.js `^22.19.0 || >=24`, pnpm `11.25.0` (enable via corepack); the development pin is DSH `0.2.1-rc.3`.
 
 **Platforms**: macOS, Linux, Windows — the panel is a UI surface with no platform-specific execution semantics; the Windows CI lane is parked by default and can be enabled through the `DSH_WINDOWS_CI` repository variable when the panel grows platform-dependent behavior.
 
@@ -49,7 +49,7 @@ dsh plugin --profile web add /path/to/repo
 > [!TIP]
 > When `dsh` is not on PATH (e.g. running DSH from a source checkout), replace `dsh` in the commands with `pnpm dsh`.
 
-**Prerequisite**: this plugin only visualizes decisions an existing reviewer already made — it reviews nothing itself. For the panel to show anything, enable the official `@deepseek-ai/dsh-experimental-auto-review` first (it ships with the installation, off by default); if your installation does not carry it, install the exact `0.2.1-rc.2` explicitly — not the stale `latest`, and run the session under the Auto preset — missing either leaves the panel permanently empty.
+**Prerequisite**: this plugin only visualizes decisions an existing reviewer already made — it reviews nothing itself. For the panel to show anything, enable the official `@deepseek-ai/dsh-experimental-auto-review` first (it ships with the installation, off by default); if your installation does not carry it, explicitly install the exact version matching your DSH host — not the stale `latest`, and run the session under the Auto preset — missing either leaves the panel permanently empty.
 
 ## Development commands
 
