@@ -30,6 +30,7 @@ import {
   PENDING_ACTION,
   PROJECT_INSTRUCTIONS_FIXTURE,
   reasoningDelta,
+  reviewMessageTexts,
   reviewOptions,
   reviewUserText,
   runExecution,
@@ -76,6 +77,78 @@ describe('review request fingerprint', () => {
     })
     const instructions = match.sections.projectInstructions as readonly { kind: string }[]
     expect(instructions.map(entry => entry.kind)).toContain('current-root-instructions')
+  })
+
+  it('matches the messages protocol and rebuilds the pending action from its schema item', () => {
+    const texts = reviewMessageTexts()
+    const match = matchReviewRequest(reviewOptions({
+      messages: texts.map(text => ({ role: 'user' as const, content: [{ type: 'text' as const, text }] })),
+    }))
+    expect(match.kind).toBe('match')
+    if (match.kind !== 'match') return
+    expect(match.requestText).toBe(texts.join('\n\n'))
+    expect(match.sections.protocol).toBe('messages')
+    expect(match.sections.environment).toEqual({ cwd: '/work' })
+    expect(match.sections.projectInstructions).toBeUndefined()
+    expect(match.sections.filteredHistory).toBeUndefined()
+    expect(match.sections.history).toHaveLength(4)
+    expect(match.sections.pendingAction).toMatchObject({
+      kind: 'tool-call',
+      role: 'fact',
+      mode: 'native',
+      name: 'read_file',
+      description: 'Read one project file',
+      parameters: { type: 'object', properties: { path: { type: 'string' } } },
+      arguments: { path: 'README.md' },
+    })
+  })
+
+  it('keeps an unparsable pending arguments string verbatim instead of guessing', () => {
+    const texts = reviewMessageTexts({ pendingArguments: 'not-json' })
+    const match = matchReviewRequest(reviewOptions({
+      messages: texts.map(text => ({ role: 'user' as const, content: [{ type: 'text' as const, text }] })),
+    }))
+    expect(match.kind).toBe('match')
+    if (match.kind !== 'match') return
+    expect(match.sections.pendingAction.arguments).toBe('not-json')
+  })
+
+  const suspectedMessages: readonly [string, GenerateOptions][] = [
+    ['a first message without the ENVIRONMENT marker', reviewOptions({
+      messages: [
+        { role: 'user', content: [{ type: 'text', text: 'CONTEXT\n{"cwd":"/work"}' }] },
+        { role: 'user', content: [{ type: 'text', text: '{"kind":"tool-call","role":"fact","mode":"native","name":"read_file","arguments":"{}"}' }] },
+      ],
+    })],
+    ['a non-JSON ENVIRONMENT body', reviewOptions({
+      messages: [
+        { role: 'user', content: [{ type: 'text', text: 'ENVIRONMENT\nnot-json' }] },
+        { role: 'user', content: [{ type: 'text', text: '{"kind":"tool-call","role":"fact","mode":"native","name":"read_file","arguments":"{}"}' }] },
+      ],
+    })],
+    ['a history message of an unknown kind', reviewOptions({
+      messages: [
+        { role: 'user', content: [{ type: 'text', text: 'ENVIRONMENT\n{"cwd":"/work"}' }] },
+        { role: 'user', content: [{ type: 'text', text: '{"kind":"surprise"}' }] },
+        { role: 'user', content: [{ type: 'text', text: '{"kind":"tool-call","role":"fact","mode":"native","name":"read_file","arguments":"{}"}' }] },
+      ],
+    })],
+    ['a last message that is not the pending tool call', reviewOptions({
+      messages: [
+        { role: 'user', content: [{ type: 'text', text: 'ENVIRONMENT\n{"cwd":"/work"}' }] },
+        { role: 'user', content: [{ type: 'text', text: '{"kind":"user-message","role":"constraint","source":{"kind":"user"},"content":[]}' }] },
+      ],
+    })],
+    ['a non-user history message', reviewOptions({
+      messages: [
+        { role: 'user', content: [{ type: 'text', text: 'ENVIRONMENT\n{"cwd":"/work"}' }] },
+        { role: 'assistant', content: [{ type: 'text', text: '{"kind":"tool-call"}' }] },
+      ],
+    })],
+  ]
+
+  it.each(suspectedMessages)('counts %s as suspected, never as a match', (_label, options) => {
+    expect(matchReviewRequest(options).kind).toBe('suspected')
   })
 
   it('does not match an ordinary conversation', () => {
@@ -151,6 +224,25 @@ describe('captured record fidelity', () => {
     expect(Object.isFrozen(record.sections.pendingAction)).toBe(true)
     expect(Object.isFrozen(record.sections.filteredHistory)).toBe(true)
     expect(Object.isFrozen(record.output)).toBe(true)
+  })
+
+  it('captures a messages-protocol request and correlates it to its execution', async () => {
+    const host = makeHost()
+    const messages = reviewMessageTexts().map(text => ({
+      role: 'user' as const,
+      content: [{ type: 'text' as const, text }],
+    }))
+    await capture(host, reviewOptions({ messages }))
+    const record = firstRecord(host)
+    expect(record.sections.protocol).toBe('messages')
+    expect(Array.isArray(record.sections.history)).toBe(true)
+    expect(Object.isFrozen(record.sections.history)).toBe(true)
+    await expect(runExecution(host)).resolves.toEqual({ kind: 'allow' })
+    expect(firstRecord(host).correlation).toEqual({
+      sessionId: 'session-1',
+      callId: 'call-1',
+      downstreamDecision: 'allow',
+    })
   })
 
   it('keeps reasoning blocks in order and uses the final text block as rawText', async () => {

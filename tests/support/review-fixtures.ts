@@ -118,6 +118,48 @@ export function reviewUserText(options: ReviewUserTextOptions = {}): string {
     .join('\n\n')
 }
 
+/** Options for {@link reviewMessageTexts}. */
+export interface ReviewMessagesOptions {
+  /** The pending call's raw arguments string; defaults to the fixture call's JSON. */
+  readonly pendingArguments?: string
+  /** The pending call's mode. */
+  readonly pendingMode?: 'native' | 'ptc-inner'
+  /** History entries inserted before the pending call, each rendered as one message. */
+  readonly before?: readonly unknown[]
+  /** The pending call's name. */
+  readonly pendingName?: string
+}
+
+/**
+ * The per-message user texts of the messages protocol (0.2.2-alpha and
+ * later): `ENVIRONMENT` plus its JSON body, then one retained Session item
+ * per message, ending with the pending tool call. A `tool-schema` entry for
+ * the pending call's mode and name precedes it, the way upstream emits the
+ * schema before the first call that uses it.
+ * @param options - pending call and history variations.
+ * @returns the user texts, one per message.
+ */
+export function reviewMessageTexts(options: ReviewMessagesOptions = {}): string[] {
+  const mode = options.pendingMode ?? 'native'
+  const name = options.pendingName ?? 'read_file'
+  const rawArguments = options.pendingArguments ?? JSON.stringify({ path: 'README.md' })
+  const entries = [
+    ...(options.before ?? [
+      { kind: 'user-message', role: 'constraint', source: { kind: 'agent-instructions' },
+        content: [{ type: 'text', text: 'Use spaces for indentation.' }] },
+      { kind: 'tool-call', role: 'fact', mode: 'native', name: 'list_files', arguments: '{"path":"."}' },
+    ]),
+    { kind: 'tool-schema', role: 'fact', mode, name,
+      description: 'Read one project file',
+      parameters: { type: 'object', properties: { path: { type: 'string' } } } },
+    { kind: 'tool-call', role: 'fact', mode, name, arguments: rawArguments },
+  ]
+  return [
+    `ENVIRONMENT\n${json({ cwd: '/work' })}`,
+    ...entries.map(entry => json(entry)),
+  ]
+}
+
 /** Options accepted by {@link reviewOptions}. */
 export interface ReviewOptionsOverrides {
   readonly userText?: string

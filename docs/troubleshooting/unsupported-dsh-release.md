@@ -75,7 +75,7 @@
   1. 在插件仓库里把 pin 指向候选版本并安装：
 
      ```bash
-     node scripts/upgrade-dsh.mjs 0.2.1-rc.3
+     node scripts/upgrade-dsh.mjs 0.2.2-alpha.2
      pnpm install --no-frozen-lockfile --config.minimumReleaseAge=0
      ```
 

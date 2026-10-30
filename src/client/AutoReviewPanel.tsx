@@ -233,7 +233,9 @@ function RecordDetail({ record, onBack, t }: {
   const chip = record.finish !== undefined ? 'failed' : record.output.decision ?? 'failed'
   const action = record.sections.pendingAction
   const args = argumentLines(action.arguments)
-  const history = Array.isArray(record.sections.filteredHistory) ? record.sections.filteredHistory : []
+  const history = Array.isArray(record.sections.filteredHistory)
+    ? record.sections.filteredHistory
+    : (record.sections.history ?? [])
   const [tab, setTab] = useState<DetailTab>('call')
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set())
   const open = (id: string): boolean => expanded.has(id)
@@ -293,8 +295,11 @@ function RecordDetail({ record, onBack, t }: {
                 e(Json, { value: entry, t }))))
         : tab === 'project'
           ? e('div', null,
-              e('div', { className: 'arp-entry-title' }, 'PROJECT_INSTRUCTIONS'),
-              e(Json, { value: record.sections.projectInstructions, t }),
+              // The messages protocol folds project instructions into
+              // constraint-role history entries; only ENVIRONMENT remains.
+              record.sections.projectInstructions === undefined ? null
+                : [e('div', { key: 'pi-t', className: 'arp-entry-title' }, 'PROJECT_INSTRUCTIONS'),
+                    e(Json, { key: 'pi-v', value: record.sections.projectInstructions, t })],
               e('div', { className: 'arp-entry-title' }, 'ENVIRONMENT'),
               e(Json, { value: record.sections.environment, t }))
           : e('div', null,

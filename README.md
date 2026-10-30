@@ -25,11 +25,11 @@ DSH（DeepSeek Harness）的 Auto 权限预设由 Auto Review 审查器在后台
 
 | DSH 系列 | 受支持的版本 |
 | --- | --- |
-| `0.2.1` | `0.2.1-rc.2`, `0.2.1-rc.3` |
+| `0.2.1` | `0.2.1-rc.2`, `0.2.2-alpha.2` |
 
 DSH 版本不在表内、或 `@deepseek-ai/dsh-*` 各包版本不一致时，插件不会启动，行为等同没装。
 
-**从源码构建 / 贡献**：Node.js `^22.19.0 || >=24`，pnpm `11.25.0`（建议经 corepack 启用）；开发 pin 的 DSH 为 `0.2.1-rc.3`。
+**从源码构建 / 贡献**：Node.js `^22.19.0 || >=24`，pnpm `11.25.0`（建议经 corepack 启用）；开发 pin 的 DSH 为 `0.2.2-alpha.2`。
 
 **运行平台**：macOS、Linux、Windows——面板是 UI 面，无平台特定执行语义；Windows CI 腿默认停放，面板出现平台相关行为时再由仓库变量 `DSH_WINDOWS_CI` 启用。
 
