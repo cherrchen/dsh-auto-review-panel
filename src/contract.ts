@@ -66,17 +66,34 @@ export interface ReviewPendingAction {
 }
 
 /**
- * The five request sections.
+ * Which upstream request protocol produced one record's sections.
  *
- * `policy` is `options.system` verbatim; the four data sections are the parsed
- * JSON values from the user message. `requestText` keeps the user message
- * verbatim for audit and exact comparison.
+ * `sections` is the original rendering: one user message carrying the four
+ * section headers (rc.2 through rc.5). `messages` is the 0.2.2-alpha
+ * rendering: the first user message is `ENVIRONMENT\n{json}` and every later
+ * user message is one retained Session item as a JSON object, ending with
+ * the pending tool call. Records persisted before this field existed carry
+ * no `protocol` — presence of `filteredHistory` identifies them.
+ */
+export type ReviewRequestProtocol = 'sections' | 'messages'
+
+/**
+ * The request sections.
+ *
+ * `policy` is `options.system` verbatim; the data sections are the parsed
+ * JSON values from the user messages. `requestText` keeps the user text
+ * verbatim for audit and exact comparison. `projectInstructions` and
+ * `filteredHistory` exist only under the `sections` protocol; `history` —
+ * the retained Session items in order, ending with the pending call — only
+ * under `messages`.
  */
 export interface ReviewSections {
+  readonly protocol?: ReviewRequestProtocol
   readonly policy: string
   readonly environment: unknown
-  readonly projectInstructions: unknown
-  readonly filteredHistory: unknown
+  readonly projectInstructions?: unknown
+  readonly filteredHistory?: unknown
+  readonly history?: readonly unknown[]
   readonly pendingAction: ReviewPendingAction
 }
 

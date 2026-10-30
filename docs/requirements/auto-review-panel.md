@@ -26,8 +26,8 @@ Auto 权限预设下，每一次工具执行都先经 Auto Review 审查器裁�
 
 | 数据 | 内容 | 存活期 |
 | --- | --- | --- |
-| `ReviewSnapshot` | `{provider, model, cwd, projectInstructions, history, action}`——对应请求的四个数据分区：ENVIRONMENT（effective cwd）、PROJECT_INSTRUCTIONS（`agent-instructions` 来源、constraint 角色）、FILTERED_HISTORY（human/direct-parent/constraint/checkpoint/fact 角色标注的用户消息与历史工具调用）、PENDING_ACTION（模式、名字、schema、参数） | 冻结后仅用于渲染请求文本 |
-| 审查请求 | `system: REVIEW_POLICY`（固定五段策略全文）+ 单条 user 消息（四节文本）+ `temperature: 0`，经 `ctx.llm.stream(options)` | 请求对象 deepFreeze，不进任何日志 |
+| `ReviewSnapshot` | rc.2–rc.5：`{provider, model, cwd, projectInstructions, history, action}`——对应请求的四个数据分区；0.2.2-alpha 起：`{provider, model, cwd, history, pending}`——`history` 为保留条目序列（含 `tool-schema`/`tool-call`/`user-message`），末位为待审 call，`pending` 为其模式限定键与 schema | 冻结后仅用于渲染请求 |
+| 审查请求 | `system: REVIEW_POLICY`（固定策略全文）+ `temperature: 0`，经 `ctx.llm.stream(options)`；消息面两协议：rc.2–rc.5 为单条 user 消息（四节文本），0.2.2-alpha 起为多条 user 消息（`ENVIRONMENT` 首条 + 每条保留条目一条，待审 call 在末位） | 请求对象 deepFreeze，不进任何日志 |
 | 审查响应 | 0..n 个 reasoning 块 + 恰好一个 text 块（`{"risk","decision","reason"?}`） | `readDecision` 消费后丢弃 |
 | 裁决结局 | reviewer decision 只有 allow/deny（allow 协议禁带 reason）；其后宿主处置：allow → `next()` 透传；deny + `ask` → 上游自己把 downstream 的 allow 转成 ask（**上游产生的 ask 不经过 append listener**；下游 listener 自己仍可能返回 ask）；deny + `never` → 直接拒绝（持久化 `AUTO_REVIEW_DENIED`）；reviewer 故障/abort → `finish` chunk 的 `error`/`aborted` + code/message | 仅 deny 的错误码落进工具结果；ask 只存在于上游 listener 自己的返回值里 |
 
@@ -46,13 +46,13 @@ Auto 权限预设下，每一次工具执行都先经 Auto Review 审查器裁�
 
 ### 4.1 审查记录捕获（宿主半部）
 
-- **`llm/stream` 只读 tee**：listener 识别审查流后 `next()` 取真 stream，返回"边转发边记录"的包装 iterable；options 与 chunk 只读，绝不替换、短路或重发。识别用**结构指纹**而非版本字符串：`options.system` 以 `REVIEW_POLICY` 节头开头；恰一条 user 消息且其文本含 `ENVIRONMENT` / `PROJECT_INSTRUCTIONS` / `FILTERED_HISTORY` / `PENDING_ACTION` 四个节头；`temperature === 0`；`options.sessionId` 与 `options.purpose` 均缺席（上游 reviewer 不设身份字段，`purpose` 联合类型无 review 值）。指纹不匹配 → 不识别 → 不记录——普通对话流不匹配是**正常路径**，指纹失配绝不产生任何用户可见信号。
+- **`llm/stream` 只读 tee**：listener 识别审查流后 `next()` 取真 stream，返回"边转发边记录"的包装 iterable；options 与 chunk 只读，绝不替换、短路或重发。识别用**结构指纹**而非版本字符串：`options.system` 以 `REVIEW_POLICY` 节头开头；`temperature === 0`；`options.sessionId` 与 `options.purpose` 均缺席（上游 reviewer 不设身份字段，`purpose` 联合类型无 review 值）；user 消息部分按上游两种渲染协议分别识别——`sections` 协议（rc.2–rc.5）：恰一条 user 消息且其文本含 `ENVIRONMENT` / `PROJECT_INSTRUCTIONS` / `FILTERED_HISTORY` / `PENDING_ACTION` 四个节头；`messages` 协议（0.2.2-alpha 起）：首条 user 消息为 `ENVIRONMENT\n{json}`，其后每条消息是一个保留 Session 条目 JSON（`user-message`/`tool-call`/`tool-schema`），末条为待审 tool-call 条目，其 `description`/`parameters` 取自最后一个同 `mode`+`name` 的 `tool-schema` 条目。指纹不匹配 → 不识别 → 不记录——普通对话流不匹配是**正常路径**，指纹失配绝不产生任何用户可见信号。
 - **tee 的防御边界**：吞掉的只有**记录路径自身**的异常——上游 stream 的 `error`/`aborted` finish chunk 与普通 chunk 一律原样透传（否则就改了 reviewer 的失败语义）；记录失败最坏丢一条记录，绝不影响裁决。
 - **`tools/pre-execute` 关联 listener（prepend，挂载后延迟一个 macrotask）**：维护"AUTO preset + 有 agent"的在飞执行表；`llm/stream` 记录完成后按 PENDING_ACTION 的 `name` + `arguments` 精确匹配回填 `{sessionId, callId, downstreamDecision, denialInfo?}`。prepend 前置使 `next()` 包进整个上游 reviewer：上游返回的决定（deny+never 的 `denied()`、deny+ask 的 `askUser`）即 `downstreamDecision`，上游 deny 携带的 `info`（`AutoReviewDeniedError`/`AUTO_REVIEW_DENIED`/`reason`）逐字落进 `correlation.denialInfo`。**延迟注册的依据见架构文档 §3.1 实测结论**：service 构造期或 `ctx.effect` 同步注册都会被上游反超；延迟一个 macrotask 在实测组合中落在最前。若某纤维更晚 prepend（顺序非公开契约），listener 退回"上游之后"：此时 deny+never / reviewer failed 的 exec 不再到达，记录仍以 PENDING_ACTION 自持完整、关联字段如实缺席。
 - **宿主结局佐证（`session/event`）**：`tool/result`（callId 匹配）回填 `hostOutcome.toolResult {isError, name?, code?, reason?}`；`approval/asked`/`approval/decided`（经 `callId` 与 requestId 桥接）回填 `hostOutcome.approval {outcome, reason?}`。佐证只能落在已有 `correlation.callId` 的记录上——事件早于关联落位时暂存，`correlate()` 时并入；匹配不上的一律丢弃，未关联记录如实无佐证（**ask 的审批面只呈现在详情"宿主结局"行——`ask` 本身不是 reviewer decision，不进裁决 chip**）。
 - **记录缓冲**：每会话与全局双上限的环形缓冲（每会话 50 / 全局 200 条，超长丢弃最旧）；记录落缓冲即不可变；`id` 由宿主铸造。上限经长跑实测复核：单条记录驻留约 2 KiB（JSON 投影约 16 KiB），200 全局帽下全量驻留约 0.3 MiB——两个上限按证据保留不变。
 - **响应解析**：末个 text 块按上游协议解析 `{risk, decision, reason?}`（allow 协议禁带 reason）；解析失败裁决记 `error` 并保留原始尾部文本（`output.rawText` **始终**保存——"模型原文"的数据源）。`finish` chunk 为 `error`/`aborted` 时记录 `finish: {kind, code?, message?}`——reviewer 失败也必须留下记录，否则用户只在轨迹看到工具失败而面板空白。
-- **记录模型**（契约见 `src/contract.ts`）：`{id, capturedAt, provider, model, requestText, sections{policy, environment, projectInstructions, filteredHistory, pendingAction}, reasoning[], output{risk?, decision?, reason?, rawText}, finish?, correlation?{sessionId, callId, downstreamDecision, denialInfo?}, hostOutcome?{toolResult?, approval?}}`——`policy` 为 `options.system` 逐字、`requestText` 为 user 消息文本逐字，两者重组即审查请求全文（"逐字"验收由此可执行）；`sections` 是解析后的结构面（含四个数据节的对象形式），UI 消费它、`requestText` 留作对照与审计。
+- **记录模型**（契约见 `src/contract.ts`）：`{id, capturedAt, provider, model, requestText, sections{protocol, policy, environment, projectInstructions?, filteredHistory?, history?, pendingAction}, reasoning[], output{risk?, decision?, reason?, rawText}, finish?, correlation?{sessionId, callId, downstreamDecision, denialInfo?}, hostOutcome?{toolResult?, approval?}}`——`policy` 为 `options.system` 逐字、`requestText` 为全部 user 消息文本按顺序重组（messages 协议下以 `\n\n` 连接），两者重组即审查请求全文（"逐字"验收由此可执行）；`sections` 是解析后的结构面：`sections` 协议填 `projectInstructions`/`filteredHistory`，`messages` 协议填 `history`（全部保留条目，含末尾待审条目），`pendingAction` 两协议同构（messages 协议下 `arguments` 为解析后的值、schema 字段由 tool-schema 条目补齐）；UI 消费 `sections`、`requestText` 留作对照与审计。
 
 ### 4.2 面板通道
 
@@ -73,7 +73,7 @@ Auto 权限预设下，每一次工具执行都先经 Auto Review 审查器裁�
 - **列表**（每条审查一行，至多三行排版、行间无分割线）：第一行左侧 = 工具名 + mode 徽标（native/ptc-inner），右侧 = risk 标签 + 裁决 chip 两个着色 Tag（**allow/deny/error/failed 四种——`ask` 不是 reviewer decision 而是宿主处置，v1 不显示**）；第二行 = 标识性参数预览独占一行（exec 类为 `command`、文件类为 `path`/`file_path`，无字符串参数时该行如实缺席）；第三行 = 依据行（deny 的 reason 截断；allow 显示"协议不携带理由"，reasoning 在详情里）最右端时间。检索范围 v1：会话过滤（默认当前会话；**"未关联"组的记录恒可见**——deny+never 的记录没有 sessionId，恰是最高风险的那批）+ risk/decision/tool 轻量多选筛选 + 审查时间起止范围（闭区间；起点/终点各自可单独生效，起止倒置时如实无命中，可一键清除）；tool 选项 = 宿主从实时工具注册表读取的 `status.tools`（`ctx.tools.schemas(agent)`，agent 由 `ctx.agents.get(sessionId)` 定位；排除 reviewer 从不审查的 `run_code`）**并入已加载记录的 `action.name` 与当前选中值**——注册表是 live 会话的首选来源，历史名字只为"重启后的记录仍可筛选"服务，不预置静态清单、不作推断——上游工具名为 `read`/`write`/`edit`/`read_image`/`glob`/`grep`/`bash`/`pwsh`/`todo_write`/`web_*` 等，按组合挂载；注册表不可读时无选项如实降级；全文检索不留 v1。
 - **详情**（概览 + tab 分区，与会话视图的"对话/轨迹"切换同构）：
   - 顶部概览卡（约 1/4 高度、内容驱动不写死）：risk 标签 + 裁决 chip + reason 全文（或 allow 的协议说明）+ `provider/model` 一行 + 审查时间 + 工具名 + `arguments` 的标识性参数（command/file_path）与 `description` 各一行 + `finish` 异常（如有）；
-  - 四个 tab：`工具调用`（pendingAction）、`审查上下文`（FILTERED_HISTORY 逐条、**按原始 `role`/`source.kind` 展示不重分类**——multi-root fork 会渲染 `current-root-instructions` 等额外条目，原样呈现）、`项目环境`（PROJECT_INSTRUCTIONS 与 ENVIRONMENT 同一面板）、`审查结果`（`思考` 折叠块收 reasoning，`output.rawText` 按 JSON 解析呈现，解析失败按原文）。每个 tab 的内容用上游 `JsonTree` 可视化；REVIEW_POLICY 是固定策略文本，不在每条记录里展开——唯一露面处是面板 header 的帮助/信息 popover（About），其中同时标明当前挂载的审查器包名（`status.reviewerPackage`，读不出时如实缺席）。
+  - 四个 tab：`工具调用`（pendingAction）、`审查上下文`（`filteredHistory`/`history` 逐条、**按原始 `kind`/`role`/`source.kind` 展示不重分类**——multi-root fork 会渲染 `current-root-instructions` 等额外条目，messages 协议含 `tool-schema`/`tool-call` 条目，原样呈现）、`项目环境`（`sections` 协议为 PROJECT_INSTRUCTIONS 与 ENVIRONMENT 同面板；`messages` 协议无独立 PROJECT_INSTRUCTIONS——项目指令以 constraint 角色落在 history 里——只渲染 ENVIRONMENT）、`审查结果`（`思考` 折叠块收 reasoning，`output.rawText` 按 JSON 解析呈现，解析失败按原文）。每个 tab 的内容用上游 `JsonTree` 可视化；REVIEW_POLICY 是固定策略文本，不在每条记录里展开——唯一露面处是面板 header 的帮助/信息 popover（About），其中同时标明当前挂载的审查器包名（`status.reviewerPackage`，读不出时如实缺席）。
 - **精简原则**（可验收，见 §6）：默认列表行只含上述至多三行字段；详情默认落在 `工具调用` tab、其余面板不进 DOM（思考块仍折叠）；REVIEW_POLICY 仅在 About 出现一次；已在 session 轨迹可见的工具卡内容不重复呈现。
 - **空态四种如实区分**：① Auto Review bundle 未启用/未安装（经 permission-presets 目录是否含 AUTO preset 判定；判定不了时并入④）——最常见的"面板永远空"原因，文案须直接指向启用方法；② 会话未用 Auto preset；③ web 组合中宿主未注册通道（如 Connection 未注入或注册失败——headless 组合下面板整体不存在，不属空态）；④ 审查器在线但尚无记录。**记录在手时一律渲染记录**——已持久化的历史优先于①②④（Auto Review 当前未启用、会话已不是 Auto 时历史照常展示）；③通道缺席例外，无通道无从取数。**没有"指纹未命中"态**——指纹失配不产生任何信号（依据见 ADR-0003 决策 3）；"疑似审查流"（system 以 `REVIEW_POLICY` 开头但其余不匹配）只进宿主诊断计数，不进 UI。
 - **历史分页**：`page.hasMore` 时列表底部出现"加载更早"按钮，按 `before` 游标拉取严格更旧页；翻页期间暂停自动刷新（防游标边界空洞）并显示暂停提示，刷新回到最新。工具筛选项并入已加载记录的 `action.name`——重启后恢复的历史记录因此仍可筛选。
@@ -115,7 +115,7 @@ Auto 权限预设下，每一次工具执行都先经 Auto Review 审查器裁�
 
 宿主捕获：
 
-- AUTO preset 会话执行一次 low-risk 调用后，缓冲里恰好多一条记录：`policy` 与 `options.system` 逐字一致、`sections` 四个数据节与 `requestText` 逐节一致、`decision: allow`、reasoning 原文完整、`output.rawText` 与原始输出逐字一致。
+- AUTO preset 会话执行一次 low-risk 调用后，缓冲里恰好多一条记录：`policy` 与 `options.system` 逐字一致、`sections` 数据节与 `requestText` 逐节一致（协议由 `sections.protocol` 标明）、`decision: allow`、reasoning 原文完整、`output.rawText` 与原始输出逐字一致。
 - `never` 下一次 high-risk 拒绝：记录含 `decision: deny` + reason；prepend 居前的组合中回填 `correlation{sessionId, callId, downstreamDecision: 'deny', denialInfo{AUTO_REVIEW_DENIED}}` 且 `hostOutcome.toolResult` 由日志二次佐证；顺序不利使 exec 未到达关联 listener 时记录仍完整、`correlation` 缺席，且该记录归入恒可见的"未关联"组。
 - reviewer finish 为 `error`/`aborted`（如断流）：记录保留 `finish` 字段，不以缺省收尾。
 - 非审查 LLM 流（普通 session 对话、compaction、session-title）不产生记录；指纹任一要素缺失不误记；fork 形状的 `reviewUserText`（ENVIRONMENT 含 multiRoot 字段、PROJECT_INSTRUCTIONS 含 `current-root-instructions` 条目）经同一指纹命中且解析无损。
@@ -144,4 +144,4 @@ Auto 权限预设下，每一次工具执行都先经 Auto Review 审查器裁�
 - ~~关联时机~~ **已收口（M3）**：prepend 延迟注册经真实组合实测采纳——`smoke:live` 断言 `deny+never` 回填 `correlation` 与 `denialInfo{AUTO_REVIEW_DENIED}`；机制与退路见架构文档 §3.1。
 - ~~全局缓冲上限~~ **已收口（M3）**：长跑实测单条驻留约 2 KiB（16 KiB JSON），200 全局帽 ≈ 0.3 MiB，50/200 上限按证据保留。
 - 「检索」的 v1 范围定为：会话过滤 + risk/decision/tool 多选筛选 + 审查时间起止范围；按工具名/参数的全文检索不在 v1。
-- 「上下文维护」的 v1 范围定为：每条审查的最终快照（policy + 四节 + requestText）；跨调用的上下文演化/差分视图是另一个功能，不在本插件承诺内。
+- 「上下文维护」的 v1 范围定为：每条审查的最终快照（policy + 数据节 + requestText）；跨调用的上下文演化/差分视图是另一个功能，不在本插件承诺内。

@@ -15,6 +15,13 @@
 
 对比上游 `dsh-v0.2.1-rc.2` 与 `dsh-v0.2.1-rc.3`（commit `1f81c047fc48fa190a683e469daa699857e9afe8`）：`packages/experimental/auto-review` 仅包版本变化，源码与测试未改，以下审查语义仍适用。插件依赖的 tools、llm、permission-presets、session 与历史存储接缝没有实现变化；客户端侧栏新增菜单/固定项能力，plugin-manager 新增 `pluginNavigation.openList()`，本插件使用的 tab 注册、`sidebar.right.pane.tab` 与 `plugins.bundle.config` 接缝保持兼容，无需新增版本分支。
 
+## rc.4 / rc.5 / 0.2.2-alpha.2 复核
+
+- **rc.4、rc.5**：`packages/experimental/auto-review` 与本插件依赖的全部宿主接缝（permission-presets、session、tools、llm、approval、home-paths、atomic-write）均无相关实现变化，既有指纹与裁决协议原样适用。
+- **0.2.2-alpha.2**：`auto-review` 重写为按条目的 `messages` 渲染协议——`system` 仍是 `REVIEW_POLICY`，`temperature` 仍为 0，仍不设 `sessionId`/`purpose`；但 `messages` 由"单条 user 消息四节"改为"多条 user 消息"：首条 `ENVIRONMENT\n{json}`，其后每条是一个保留 Session 条目（`user-message`/`tool-call`/`tool-schema` 三种 `kind` 的 JSON 对象），末条为待审 tool-call（`mode` ∈ `native`/`ptc-inner`、`name` 字符串、`arguments` 为原始 JSON 字符串）。待审动作的 `description`/`parameters` 不再内嵌，取自首条之前最近一个同 `mode`+`name` 的 `tool-schema` 条目。历史条目跨审查复用、逐条字节稳定，供 provider 前缀缓存。裁决响应协议（reasoning 块 + 单一 text 块 `{risk,decision,reason?}`）、`tools/pre-execute` 瀑布签名、deny/ask/failed 的结局语义不变；新增 reviewer 失败身份 `AutoReviewFailedError`/`AUTO_REVIEW_FAILED`（原仅 `AutoReviewDeniedError`/`AUTO_REVIEW_DENIED`）。
+- **工具执行接缝**：`dsh-tools` 重构为 executor 架构——`tools.execute` 由单次调用形参改为 `ToolBatchInput {calls, signal, agent?, toolSet?, log?}`（`log` 令 executor 自行落盘 `tool/call`/`tool/result`），结果改为 `ToolBatchResult`；组合 bundle 挂载 `dsh-tool-executor-native`（root scope）。`RUN_CODE_NAME`、`ToolExecution`、`PreToolDecision`、`tools/pre-execute`、`tools/result`、`tools.schemas()` 公共面保持不变。测试fixture `defineContentToolFixture` 移入 `dsh-tool-testkit`，跨版本稳定入口为 `defineTool`（须显式声明 `output`）。
+- **cordis**：0.2.2-alpha.2 需要 `~4.0.6-alpha.1`，peer 范围相应扩列。
+
 当前支持版本以 [`SUPPORTED_DSH_RELEASES`](../../src/compat/dsh-version.ts) 为准；验证结果见[路线图兼容性验收记录](../plans/completed/2026-10-20-auto-review-panel.md#兼容性验收记录)。
 
 ## 审查入口与生命周期

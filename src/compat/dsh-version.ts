@@ -33,7 +33,13 @@ import { fileURLToPath } from 'node:url'
  * the upgrade smoke passed on that exact version — a green CI run on an
  * unlisted release is evidence, not authorization.
  */
-export const SUPPORTED_DSH_RELEASES = ['0.2.1-rc.2', '0.2.1-rc.3'] as const
+export const SUPPORTED_DSH_RELEASES = [
+  '0.2.1-rc.2',
+  '0.2.1-rc.3',
+  '0.2.1-rc.4',
+  '0.2.1-rc.5',
+  '0.2.2-alpha.2',
+] as const
 
 /** One release this plugin claims to support. */
 export type SupportedDshRelease = typeof SUPPORTED_DSH_RELEASES[number]

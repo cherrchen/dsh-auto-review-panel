@@ -25,11 +25,11 @@ The first release `v0.1.0` is ready: review-record capture, host-outcome evidenc
 
 | DSH line | Supported releases |
 | --- | --- |
-| `0.2.1` | `0.2.1-rc.2`, `0.2.1-rc.3` |
+| `0.2.1` | `0.2.1-rc.2`, `0.2.2-alpha.2` |
 
 When the host's DSH release is not listed, or `@deepseek-ai/dsh-*` packages disagree on a version, the plugin does not start and behaves exactly as if it were not installed.
 
-**Building from source / contributing**: Node.js `^22.19.0 || >=24`, pnpm `11.25.0` (enable via corepack); the development pin is DSH `0.2.1-rc.3`.
+**Building from source / contributing**: Node.js `^22.19.0 || >=24`, pnpm `11.25.0` (enable via corepack); the development pin is DSH `0.2.2-alpha.2`.
 
 **Platforms**: macOS, Linux, Windows — the panel is a UI surface with no platform-specific execution semantics; the Windows CI lane is parked by default and can be enabled through the `DSH_WINDOWS_CI` repository variable when the panel grows platform-dependent behavior.
 

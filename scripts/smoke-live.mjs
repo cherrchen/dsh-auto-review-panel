@@ -119,20 +119,31 @@ try {
 
     const { LlmAdapter, ToolCallId, createMessage } = await loadRuntimeModule('@deepseek-ai/dsh-llm')
     const { SessionId } = await loadRuntimeModule('@deepseek-ai/dsh-session')
-    const { defineContentToolFixture } = await loadRuntimeModule('@deepseek-ai/dsh-tools')
+    const { defineTool } = await loadRuntimeModule('@deepseek-ai/dsh-tools')
     const { setApprovalPolicy } = await loadRuntimeModule('@deepseek-ai/dsh-user-approval')
 
-    // Deterministic verdicts keyed on the pending call's `mark` argument.
+    // Deterministic verdicts keyed on the pending call's `mark` argument. The
+    // mark lives in the request's user text — the single PENDING_ACTION
+    // section pre-alpha, the final pending-call message since 0.2.2-alpha —
+    // so scan every message's text rather than one fixed position.
     const reviewRequests = []
     class Scripted extends LlmAdapter {
       async *stream(options) {
         reviewRequests.push(options)
-        const text = options.messages?.[0]?.content?.[0]?.text ?? ''
-        const verdict = /"mark":\s*"deny"/u.test(text)
+        const text = (options.messages ?? [])
+          .map(message => (message.content ?? []).map(block => block.text ?? '').join('\n'))
+          .join('\n')
+          // The messages protocol renders call arguments as an escaped JSON
+          // string; unescaping quotes restores the plain `"mark":"deny"` text.
+          .replaceAll('\\"', '"')
+        // The pending call is always the request's last entry — earlier
+        // messages carry history, whose marks must not shadow the verdict.
+        const mark = [...text.matchAll(/"mark":\s*"([a-z-]+)"/gu)].at(-1)?.[1]
+        const verdict = mark === 'deny'
           ? '{"risk":"high","decision":"deny","reason":"live smoke denial"}'
-          : /"mark":\s*"malformed"/u.test(text)
+          : mark === 'malformed'
             ? 'this is not the verdict protocol'
-            : /"mark":\s*"fail"/u.test(text)
+            : mark === 'fail'
               ? null
               : '{"risk":"low","decision":"allow"}'
         if (verdict === null) {
@@ -149,10 +160,17 @@ try {
       }
     }
     ctx.llm.registerAdapter(['live-smoke'], new Scripted())
-    ctx.tools.register(defineContentToolFixture({
+    // `defineTool` is the stable entry point across the supported range; the
+    // fixture helper it replaced a content-array canonical value with was
+    // testkit-only and moved packages in 0.2.2-alpha.
+    ctx.tools.register(defineTool({
       name: 'live_smoke_probe',
       description: 'A harmless probe call for the live composition smoke',
       parameters: { file_path: { type: 'string' }, mark: { type: 'string' } },
+      output: {
+        schema: { type: 'array', items: { type: 'json' } },
+        render: (_args, value) => value,
+      },
       async execute(args) {
         return [{ type: 'text', text: `probed ${String(args.file_path ?? '')}` }]
       },
@@ -166,6 +184,10 @@ try {
     ctx.permissionPresets.set(session2, 'auto')
     const session3 = ctx.sessions.create(SessionId('live-3'), { meta: { cwd: workdir } })
     let turn = 0
+    // 0.2.2-alpha replaced the single-call execute with the batch API and gave
+    // it durable-log ownership: `setExecutor` is the structural marker, and
+    // passing `log` makes the executor append tool/call + tool/result itself.
+    const batchApi = typeof ctx.tools.setExecutor === 'function'
     const call = async (mark, extraArgs = {}, target = session) => {
       turn += 1
       const id = ToolCallId(`live-${turn}`)
@@ -186,8 +208,19 @@ try {
           content: [{ type: 'tool-call', id, name, arguments: JSON.stringify(args) }],
         }),
       }, { surfaceOp: 'append' })
-      const callEvent = target.append('tool/call', { turn, step: 1, callId: id, name, arguments: JSON.stringify(args) })
             console.log(`[smoke:live] turn ${turn}: executing ${name} mark=${args.mark}`)
+      if (batchApi) {
+        const batch = await ctx.tools.execute({
+          calls: [{ type: 'tool-call', id, name, arguments: JSON.stringify(args) }],
+          signal: AbortSignal.timeout(30_000),
+          agent,
+          log: { turn, step: 1 },
+        })
+        const result = batch.results[0]?.result
+        console.log(`[smoke:live] turn ${turn}: settled isError=${result?.isError}`)
+        return { result, callId: id, turn, target }
+      }
+      const callEvent = target.append('tool/call', { turn, step: 1, callId: id, name, arguments: JSON.stringify(args) })
       const result = await ctx.tools.execute({ callId: id, name, arguments: args, agent, signal: AbortSignal.timeout(30_000) })
       console.log(`[smoke:live] turn ${turn}: settled isError=${result.isError}`)
       return { result, callId: id, turn, callSeq: callEvent.seq, target }
@@ -196,11 +229,13 @@ try {
     /** Mirror agent-loop's appendToolResult so the Session carries the durable outcome. */
     const { createToolResultMessage } = await loadRuntimeModule('@deepseek-ai/dsh-llm')
     const logResult = (entry) => {
-      entry.target.append('tool/result', {
-        turn: entry.turn, step: 1,
-        message: createToolResultMessage({ callId: entry.callId, content: entry.result.content, isError: entry.result.isError }),
-        ...(entry.result.error?.info === undefined ? {} : { error: entry.result.error.info }),
-      }, { surfaceOp: 'append', sourceEventSeqs: [entry.callSeq] })
+      if (!batchApi) {
+        entry.target.append('tool/result', {
+          turn: entry.turn, step: 1,
+          message: createToolResultMessage({ callId: entry.callId, content: entry.result.content, isError: entry.result.isError }),
+          ...(entry.result.error?.info === undefined ? {} : { error: entry.result.error.info }),
+        }, { surfaceOp: 'append', sourceEventSeqs: [entry.callSeq] })
+      }
       entry.target.append('turn/end', { turn: entry.turn, reason: { kind: 'completed' } })
     }
 
