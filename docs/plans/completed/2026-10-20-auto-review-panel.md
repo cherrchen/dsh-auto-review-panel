@@ -93,6 +93,20 @@
 - 本地验证平台为 macOS arm64 / Node.js `24.18.0`；Linux、Windows 与浏览器人工交互未在本次本地验收覆盖。CI 继续从支持清单派生版本矩阵；Windows 腿仍按原有开关控制。
 - 主工作区已移除候选 probe overrides，保持 rc.3 开发基线；本次不创建发布 tag。
 
+### 2026-11-11：0.2.2-alpha.3 / 0.2.2-rc.1 支持提升
+
+- 支持清单扩展为 `0.2.1-rc.2` … `0.2.2-rc.1`；开发基线与 cordis pin 提升到 `0.2.2-rc.1` / `4.1.0`。rc.1 相对 alpha.3 只改包版本号（上游标签间源码一致），但两个版本各按精确 pin 跑过完整矩阵。
+- 上游差异与插件应对（详见[上游调研 §0.2.2-alpha.3 / 0.2.2-rc.1 复核](../../reference/upstream-auto-review.md#022alpha3--022rc1-复核2026-11-11)）：
+  - **审查流身份**：alpha.3 起 reviewer 在请求上声明 `purpose: 'auto-review'` 并携带被审查会话的 `sessionId`。指纹从"两字段都必须缺席"改成按自报 purpose 识别（foreign purpose / 无 purpose 却带 sessionId → suspected），记录模型与关联语义不变——身份字段只用于识别，不替代 `tools/pre-execute` 关联锚。
+  - **通道注册回归**：cordis 4.0.6-alpha.2 的服务解析改为定义站点后，`connection.rpc.handle` 内部解析 `owner.webServer` 在真实组合中失败（`cannot get property "webServer" without inject`），PANEL_CHANNEL 注册不上。新增 `src/compat/panel-channel.ts`：先试 `rpc.handle`，失败则用 `connection.admit()` 认证围栏 + `webServer` 同名 prefix 路由，RPC 信封 framing 与上游逐项对齐；缺认证围栏时不挂通道（空态③如实兜底）。
+  - base patch 的 `fs-observation-policy`/`tool-fs` 行调整、客户端 `ui-sidebar-right`/`ui-primitives`/`ui-plugin-manager` 的增量、`dsh-llm` 的 purpose 类型与 `util/values` 重写均不改变本插件使用的接缝（逐项记录在上游调研）。
+- 验证（macOS arm64 / Node.js `24.18.0`，各版本先以 `DSH_AUTO_REVIEW_PANEL_COMPAT=warn` 跑升级车道，提升后以正式 enforce 门禁复跑）：
+  - `0.2.2-alpha.3`：`pnpm verify:all` 全绿（10 个测试文件，197 通过 / 1 跳过；源码与 packed 组合各 17 项通过）；`pnpm smoke:live` 69/69。
+  - `0.2.2-rc.1`：`pnpm verify:all` 全绿（同 197 通过 / 1 跳过；组合与 packed 各 17 项）；`pnpm smoke:live` 69/69；提升后 `pnpm compat:check`、`pnpm lint`、`pnpm typecheck`、`pnpm build`、`pnpm test`、`pnpm smoke`、`pnpm pack:check`、`pnpm smoke:packed`、`pnpm docs:check` 全部通过。
+  - 新增单测：messages 协议 + review purpose/sessionId 命中、sections 协议 + review purpose 命中、purpose/sessionId 组合负例；通道接缝（优先 rpc、回退命名路由、无认证不挂、信封 framing 与状态码）8 项。
+  - alpha.2 回归：在隔离 worktree 中把 pin 切回 `0.2.2-alpha.2`（旧版 `rpc.handle` 接缝 + 无身份指纹），`compat:check`、`verify:all`（199 通过 / 1 跳过；组合与 packed 各 17 项）与 `smoke:live` 69/69 全部通过。该复现必须沿用 alpha.2 时代的 lockfile：`upgrade-dsh.mjs` 只钉 DSH 包与 cordis，`cordis-plugin-loader`/`-include` 的 `~1.0.7-alpha.1`/`~1.0.11-alpha.1` 范围会解析到 alpha.2 伙伴版本，与 cordis `4.0.6-alpha.1` 的 peer 不匹配、profile 起不来——这是升级车道复现旧版本的既有限制（`verify:all` 与组合冒烟不受影响），不是本插件的行为变化。
+- 主工作区移除候选 probe overrides，保持 `0.2.2-rc.1` 开发基线；本次不创建发布 tag。
+
 ## 里程碑纪律
 
 - 每个 M 有对应的 `plans/active|completed/YYYY-MM-DD-mN-*.md`；完成即迁移到 `completed/` 并在本表标注"随 `vX.Y.Z` 发版"。

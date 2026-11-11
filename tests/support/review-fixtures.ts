@@ -167,7 +167,12 @@ export interface ReviewOptionsOverrides {
   readonly system?: string | null
   readonly temperature?: number
   readonly sessionId?: string
-  readonly purpose?: 'compaction' | 'session-title'
+  /**
+   * The auxiliary-request purpose. The string is what upstream sends; the cast
+   * below is only because `GenerateOptions.purpose` is typed by the producer
+   * packages' declared keys, which this fixture does not import.
+   */
+  readonly purpose?: 'auto-review' | 'compaction' | 'session-title'
   readonly messages?: GenerateOptions['messages']
   readonly provider?: string
   readonly model?: string
@@ -192,7 +197,9 @@ export function reviewOptions(overrides: ReviewOptionsOverrides = {}): GenerateO
     ...(overrides.sessionId === undefined
       ? {}
       : { sessionId: overrides.sessionId as GenerateOptions['sessionId'] }),
-    ...(overrides.purpose === undefined ? {} : { purpose: overrides.purpose }),
+    ...(overrides.purpose === undefined
+      ? {}
+      : { purpose: overrides.purpose as unknown as GenerateOptions['purpose'] }),
   }
 }
 

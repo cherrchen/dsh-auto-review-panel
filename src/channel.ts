@@ -3,27 +3,18 @@
  *
  * The channel is a soft seam: a headless composition has no `connection` or
  * `webServer`, so the `ctx.inject` callback never runs and capture keeps
- * working with no panel — absence is not an error. The service is read from
- * `ctx.root` for the same reason the multi-root panel does it: `rpc.handle`
- * resolves `webServer` as a property of the context the service was read
- * from, and a sibling row's service is not visible from this plugin's fiber.
+ * working with no panel — absence is not an error. Which physical route
+ * carries `PANEL_CHANNEL` is the host's business; the seam discovery itself
+ * lives in `src/compat/panel-channel.ts` because it probes upstream shape
+ * (ADR-0001 keeps version-coupled code there).
  *
  * @module @dsh-electron/dsh-auto-review-panel/channel
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import { PANEL_CHANNEL, type PanelRpcResult } from './contract.ts'
+import { mountPanelChannelSeam, type PanelChannelMount } from './compat/panel-channel.ts'
+import { PANEL_CHANNEL } from './contract.ts'
 import type { ReviewCaptureHost } from './host.ts'
-
-/** The host Connection surface this channel actually uses. */
-export interface PanelConnection {
-  readonly rpc: {
-    handle(
-      channel: string,
-      handler: (endpoint: string, payload: unknown) => Promise<PanelRpcResult<unknown>>,
-    ): () => Promise<void>
-  }
-}
 
 /**
  * Mount `PANEL_CHANNEL` when this composition has both a Connection and its
@@ -33,23 +24,29 @@ export interface PanelConnection {
  */
 export function mountPanelChannel(ctx: Context, host: ReviewCaptureHost): void {
   ctx.inject(['connection', 'webServer'], connectionCtx => {
-    const connection = connectionCtx.root.get('connection') as unknown as PanelConnection | undefined
-    const rpc = connection === undefined || connection === null
-      ? undefined
-      : (connection as { rpc?: { handle?: unknown } }).rpc
-    if (rpc === undefined || typeof rpc.handle !== 'function') {
+    let mount: PanelChannelMount | undefined
+    try {
+      mount = mountPanelChannelSeam(
+        connectionCtx.get('connection'),
+        connectionCtx.get('webServer'),
+        PANEL_CHANNEL,
+        (endpoint, payload) => host.handle(endpoint, payload),
+      )
+    } catch {
+      // A host whose route registry refuses the registration is a soft
+      // failure: the panel reports the channel-missing state, boot continues.
+      mount = undefined
+    }
+    if (mount === undefined) {
       try {
-        ctx.logger.warn('auto review panel: connection resolved without rpc.handle; PANEL_CHANNEL is not mounted')
+        ctx.logger.warn('auto review panel: no Connection channel seam accepted PANEL_CHANNEL; the panel reports a missing channel')
       } catch {
         // Logging must not be the reason a headless composition fails to boot.
       }
       return
     }
-    const target = connection as PanelConnection
-    const dispose = target.rpc.handle(PANEL_CHANNEL, async (endpoint, payload) =>
-      host.handle(endpoint, payload))
     return () => {
-      void dispose()
+      void mount.dispose()
     }
   })
 }

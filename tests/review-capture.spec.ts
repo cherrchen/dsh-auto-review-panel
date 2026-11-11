@@ -103,6 +103,30 @@ describe('review request fingerprint', () => {
     })
   })
 
+  it('matches the messages protocol when the reviewer declares its purpose and session identity', () => {
+    const texts = reviewMessageTexts()
+    const match = matchReviewRequest(reviewOptions({
+      messages: texts.map(text => ({ role: 'user' as const, content: [{ type: 'text' as const, text }] })),
+      purpose: 'auto-review',
+      sessionId: 'session-1',
+    }))
+    expect(match.kind).toBe('match')
+    if (match.kind !== 'match') return
+    expect(match.sections.protocol).toBe('messages')
+    expect(match.sections.pendingAction).toMatchObject({
+      name: 'read_file',
+      arguments: { path: 'README.md' },
+    })
+  })
+
+  it('matches the sections protocol carrying the review purpose and identity', () => {
+    const match = matchReviewRequest(reviewOptions({ purpose: 'auto-review', sessionId: 'session-1' }))
+    expect(match.kind).toBe('match')
+    if (match.kind !== 'match') return
+    expect(match.sections.protocol).toBe('sections')
+    expect(match.sections.pendingAction.arguments).toEqual({ path: 'README.md' })
+  })
+
   it('keeps an unparsable pending arguments string verbatim instead of guessing', () => {
     const texts = reviewMessageTexts({ pendingArguments: 'not-json' })
     const match = matchReviewRequest(reviewOptions({
@@ -160,7 +184,7 @@ describe('review request fingerprint', () => {
     ['a non-zero temperature', reviewOptions({ temperature: 1 })],
     ['a compaction purpose', reviewOptions({ purpose: 'compaction' })],
     ['a session-title purpose', reviewOptions({ purpose: 'session-title' })],
-    ['a session identity', reviewOptions({ sessionId: 'session-1' })],
+    ['a session identity without the review purpose', reviewOptions({ sessionId: 'session-1' })],
     ['two messages', reviewOptions({
       messages: [
         { role: 'user', content: [{ type: 'text', text: reviewUserText() }] },
@@ -224,6 +248,13 @@ describe('captured record fidelity', () => {
     expect(Object.isFrozen(record.sections.pendingAction)).toBe(true)
     expect(Object.isFrozen(record.sections.filteredHistory)).toBe(true)
     expect(Object.isFrozen(record.output)).toBe(true)
+  })
+
+  it('captures a review whose request declares the review purpose and session identity', async () => {
+    const host = makeHost()
+    await capture(host, reviewOptions({ purpose: 'auto-review', sessionId: 'session-1' }))
+    expect(host.buffer.size).toBe(1)
+    expect(firstRecord(host).sections.protocol).toBe('sections')
   })
 
   it('captures a messages-protocol request and correlates it to its execution', async () => {

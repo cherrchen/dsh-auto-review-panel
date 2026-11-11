@@ -1,15 +1,16 @@
 /**
  * Structural fingerprint of the upstream Auto Review request.
  *
- * Auto Review sets no session identity and no `purpose` on its request, so a
- * review stream is indistinguishable from an ordinary one by types alone. The
- * fingerprint below is the supported discriminator: it reads the request's
- * SHAPE — the fixed policy header, `temperature: 0`, the absence of the
- * identity fields the reviewer never sets, and the request's user messages.
- * Two upstream renderings are recognized: the single message carrying the
- * four data-section headers (the `sections` protocol, rc.2–rc.5), and the
- * per-item user messages ending with the pending tool call (the `messages`
- * protocol, 0.2.2-alpha and later).
+ * A review stream is indistinguishable from an ordinary one by types alone.
+ * The fingerprint below is the supported discriminator: it reads the request's
+ * SHAPE — the fixed policy header, `temperature: 0`, the request's user
+ * messages, and the auxiliary-request identity. Three upstream renderings are
+ * recognized: the single message carrying the four data-section headers (the
+ * `sections` protocol, rc.2–rc.5), the per-item user messages ending with the
+ * pending tool call (the `messages` protocol, 0.2.2-alpha and later), and
+ * either protocol carrying the reviewer's declared `purpose: 'auto-review'`
+ * identity (0.2.2-alpha.3 and later, which also sets the reviewed Session's
+ * `sessionId`).
  *
  * This module is deliberately under `src/compat/`: the constants and the
  * parser are the version-coupled part of the capture path (ADR-0001, ADR-0003).
@@ -37,6 +38,17 @@ export const REVIEW_SECTION_HEADERS = [
 
 /** The fixed temperature the reviewer sends. */
 export const REVIEW_TEMPERATURE = 0
+
+/**
+ * The auxiliary-request `purpose` the reviewer declares from 0.2.2-alpha.3 on.
+ *
+ * The reviewer's older renderings set no purpose at all, and every purpose
+ * belongs to some other auxiliary request (compaction, session title). A
+ * purpose is therefore read as the request's identity the way the reviewer
+ * states it — never by comparing release strings — and only this value marks
+ * a review.
+ */
+export const REVIEW_REQUEST_PURPOSE = 'auto-review'
 
 /**
  * The `ENVIRONMENT` marker the messages protocol puts at the head of its
@@ -235,11 +247,16 @@ export function matchReviewRequest(options: GenerateOptions): ReviewRequestMatch
     if (options.temperature !== REVIEW_TEMPERATURE) {
       return { kind: 'suspected', reason: 'temperature is not 0' }
     }
-    if (options.sessionId !== undefined) {
-      return { kind: 'suspected', reason: 'the request carries a sessionId' }
+    // 0.2.2-alpha.3 and later declare the review purpose and also carry the
+    // reviewed Session's id as transport identity. The older renderings carry
+    // neither, so an identity without the review purpose is a shape upstream
+    // never produced and stays suspected — as does a foreign purpose.
+    const purpose = options.purpose as string | undefined
+    if (purpose !== undefined && purpose !== REVIEW_REQUEST_PURPOSE) {
+      return { kind: 'suspected', reason: `the request carries the "${purpose}" purpose` }
     }
-    if (options.purpose !== undefined) {
-      return { kind: 'suspected', reason: 'the request carries a purpose' }
+    if (purpose === undefined && options.sessionId !== undefined) {
+      return { kind: 'suspected', reason: 'the request carries a sessionId without the review purpose' }
     }
 
     const messages = options.messages
