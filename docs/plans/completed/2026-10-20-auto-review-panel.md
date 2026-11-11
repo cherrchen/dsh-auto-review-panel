@@ -110,7 +110,7 @@
 ### 2026-11-11：0.2.2-rc.2 支持
 
 - 支持清单扩展为 `0.2.1-rc.2` … `0.2.2-rc.2`；`0.2.2-rc.2` 的 npm 产物尚未发布（registry 上 `@deepseek-ai/dsh` 的最新发布仍是 `0.2.2-rc.1`），因此开发 pin、lockfile 与 release-age 精确条目都保持在 `0.2.2-rc.1`——把 manifest 指向一个不可安装的版本会破坏 `pnpm install --frozen-lockfile` 与整条 CI 主车道。发布后按升级车道把 pin 重指到 rc.2，rc.2 的矩阵腿即可转绿。
-- 上游差异与插件应对（详见[上游调研 §0.2.2-rc.2 复核](../../reference/upstream-auto-review.md#0222-rc2-复核2026-11-11)）：`auto-review`/`permission-presets` 仅版本号变化；`dsh-tools` 的 guard/deny 结构化身份与 `dsh-session` 的批量 append 都是附加面；`dsh-llm` 的错误基类迁移与 retry policy 调整不改变 `llm/stream` 签名；客户端 `Menu` 定位重写、`hoc` 槽、`ui-plugin-manager` 的 `update` 字段与 `sidebar.panellist` factory 均不触及本插件注册面。结论：无新增运行时适配分支。
+- 上游差异与插件应对（详见[上游调研 §0.2.2-rc.2 复核](../../reference/upstream-auto-review.md#0222-rc2-复核2026-11-11)）：`auto-review`/`permission-presets` 仅版本号变化；`dsh-tools` 的 guard/deny 结构化身份与 `dsh-session` 的批量 append 都是附加面；`dsh-llm` 的错误基类迁移与 retry policy 调整不改变 `llm/stream` 签名；客户端 `Menu` 定位重写、`hoc` 槽、`ui-plugin-manager` 的 `update` 字段与 `sidebar.panel.icon` factory（`sidebar.panellist` 移入其下）均不触及本插件注册面。结论：无新增运行时适配分支。
 - 验证（macOS arm64 / Node.js `24.18.0`；上游 `dsh-v0.2.2-rc.2` 以 `git archive` 解出到隔离目录，构建 host libraries 与 client 声明后，把本仓库依赖链接到该树）：
   - `pnpm typecheck`（host + client）、`pnpm build` 通过；
   - 单测 10 个文件、200 通过 / 1 个候选车道专用测试跳过；
