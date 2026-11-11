@@ -14,6 +14,8 @@
 
 **必须精确 pin**：`@deepseek-ai/dsh-*` 的 `latest` dist-tag 指向陈旧版本，真正的新版发布在 `next`；范围依赖会解析到错误版本。`pnpm-workspace.yaml` 里的 `minimumReleaseAgeExclude` 对开发版本的直接与传递 DSH 包逐项列出精确版本，供 frozen install 与运行脚本前的依赖自检使用；不使用跨版本通配豁免。它是为此配套的（pnpm 的发布年龄门禁会拦下刚发布的预发布版本）。
 
+**支持清单可以先于开发 pin 前进**：清单里可能出现一个已在隔离的上游 tag 构建上验证、但尚未发布到 npm 的版本（当前是 `0.2.2-rc.2`）。此时开发 pin、lockfile 与 release-age 条目保持在最新已发布版本，因为 CI 矩阵腿会对清单里的每个版本执行 `upgrade-dsh.mjs` + `pnpm install`，未发布的版本会在安装步骤 404；发布后把 pin 一并重指过去。
+
 ## 2. 工具链
 
 | 用途 | 工具 | 配置 |

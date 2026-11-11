@@ -26,7 +26,7 @@ The first release `v0.1.0` is ready: review-record capture, host-outcome evidenc
 | DSH line | Supported releases |
 | --- | --- |
 | `0.2.1` | `0.2.1-rc.2`, `0.2.1-rc.3`, `0.2.1-rc.4`, `0.2.1-rc.5` |
-| `0.2.2` | `0.2.2-alpha.2`, `0.2.2-alpha.3`, `0.2.2-rc.1` |
+| `0.2.2` | `0.2.2-alpha.2`, `0.2.2-alpha.3`, `0.2.2-rc.1`, `0.2.2-rc.2` |
 
 When the host's DSH release is not listed, or `@deepseek-ai/dsh-*` packages disagree on a version, the plugin does not start and behaves exactly as if it were not installed.
 

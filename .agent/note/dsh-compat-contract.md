@@ -40,4 +40,5 @@ English: [dsh-compat-contract.en.md](./dsh-compat-contract.en.md)
 - **`pnpm verify:all` 不含 `compat:check`**：故意的，升级车道要在未列入的版本上跑完整矩阵。CI 把它单独放在 lint 之前；本机验证契约完整性时单独跑 `pnpm compat:check`。
 - **`pnpm test` 依赖 `pnpm build`**：`tests/client-bundle.spec.ts` 断言的是 `lib/client.js` 制品字节；lib/ 不进 git，干净检出必须先 build。
 - **cordis 版本跟着 dsh 走**：`upgrade-dsh.mjs` 会把 cordis 开发 pin 同步重指到候选 `dsh` 声明的范围下限——树里留两份 cordis 会让模块局部 Symbol 对不上，工具调度静默失效。
+- **清单版本必须先发布到 npm**：CI 矩阵腿对清单里的每个版本执行 `upgrade-dsh.mjs` + `pnpm install`，未发布的版本会在安装步骤 404。可以先用上游 tag 在隔离目录构建并链接验证（typecheck / build / 单测 / 组合与 packed 冒烟），但开发 pin、lockfile 与 release-age 条目要等到发布后再重指；`compat:check` 只要求 pin 是清单成员，不要求它是最新成员。当前 `0.2.2-rc.2` 就处于这个状态。
 - **client 锚点行必须挂裸包名**：`auto-review-panel-client` 的 `name` 是 `@dsh-electron/dsh-auto-review-panel`（不是子路径），上游 client 图只从裸包名行读 `dsh.client`。机制见[故障排查](../../docs/troubleshooting/client-bundle-not-in-boot-graph.md)。
