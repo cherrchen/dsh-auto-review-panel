@@ -1,6 +1,6 @@
 # 上游 Auto Review 调研（`0.2.1-rc.2`）
 
-调研日期：2026-10-20。本文记录已核实的上游源码事实，是面板面只读语义的边界依据；上游原始包为 `@deepseek-ai/dsh-experimental-auto-review`，源码位于上游仓库 `packages/experimental/auto-review`。
+调研日期：2026-10-20；复核至 `dsh-v0.2.2-rc.1`（2026-11-11），各版本增量见下方复核小节。本文记录已核实的上游源码事实，是面板面只读语义的边界依据；上游原始包为 `@deepseek-ai/dsh-experimental-auto-review`，源码位于上游仓库 `packages/experimental/auto-review`。
 
 ## 基线与证据范围
 
@@ -21,6 +21,17 @@
 - **0.2.2-alpha.2**：`auto-review` 重写为按条目的 `messages` 渲染协议——`system` 仍是 `REVIEW_POLICY`，`temperature` 仍为 0，仍不设 `sessionId`/`purpose`；但 `messages` 由"单条 user 消息四节"改为"多条 user 消息"：首条 `ENVIRONMENT\n{json}`，其后每条是一个保留 Session 条目（`user-message`/`tool-call`/`tool-schema` 三种 `kind` 的 JSON 对象），末条为待审 tool-call（`mode` ∈ `native`/`ptc-inner`、`name` 字符串、`arguments` 为原始 JSON 字符串）。待审动作的 `description`/`parameters` 不再内嵌，取自首条之前最近一个同 `mode`+`name` 的 `tool-schema` 条目。历史条目跨审查复用、逐条字节稳定，供 provider 前缀缓存。裁决响应协议（reasoning 块 + 单一 text 块 `{risk,decision,reason?}`）、`tools/pre-execute` 瀑布签名、deny/ask/failed 的结局语义不变；新增 reviewer 失败身份 `AutoReviewFailedError`/`AUTO_REVIEW_FAILED`（原仅 `AutoReviewDeniedError`/`AUTO_REVIEW_DENIED`）。
 - **工具执行接缝**：`dsh-tools` 重构为 executor 架构——`tools.execute` 由单次调用形参改为 `ToolBatchInput {calls, signal, agent?, toolSet?, log?}`（`log` 令 executor 自行落盘 `tool/call`/`tool/result`），结果改为 `ToolBatchResult`；组合 bundle 挂载 `dsh-tool-executor-native`（root scope）。`RUN_CODE_NAME`、`ToolExecution`、`PreToolDecision`、`tools/pre-execute`、`tools/result`、`tools.schemas()` 公共面保持不变。测试fixture `defineContentToolFixture` 移入 `dsh-tool-testkit`，跨版本稳定入口为 `defineTool`（须显式声明 `output`）。
 - **cordis**：0.2.2-alpha.2 需要 `~4.0.6-alpha.1`，peer 范围相应扩列。
+
+## 0.2.2-alpha.3 / 0.2.2-rc.1 复核（2026-11-11）
+
+对比 `dsh-v0.2.2-alpha.2`、`dsh-v0.2.2-alpha.3` 与 `dsh-v0.2.2-rc.1`（rc.1 的提交只改包版本号，源码与 alpha.3 相同）：
+
+- **审查请求获得身份（alpha.3）**：`auto-review` 在 `GenerateOptions` 上新增 `sessionId: agent.session.id` 与 `purpose: 'auto-review'`（经 `LlmRequestPurposeMap` 声明）。`system`、`temperature: 0`、`messages` 的 `ENVIRONMENT`/保留条目渲染、裁决响应协议、`tools/pre-execute` 瀑布签名与 deny/ask/failed 结局语义均未变。这两个字段是**模型不可见的传输元数据**（provider 前缀缓存与路由键），不改变请求可见文本；面板指纹据此把"带 review purpose 的请求"与旧版"无身份请求"都识别为审查流。
+- **cordis 4.0.6-alpha.2 / 4.1.0 的服务解析变更（alpha.3 起）**：服务属性读取改由**定义站点**（def site）裁决。`connection.rpc.handle` 内部要读取 `owner.webServer`，而 Connection 服务的定义站点是它自己的 fiber（`inject: ['credentials']`），组合里 `webServer` 是兄弟行——于是 `rpc.handle` 在真实 web profile 中抛 `cannot get property "webServer" without inject`，通道根本注册不上。上游自身没有生产代码调用该 API（只有测试在 root 上 `provide('webServer')` 的场景），所以这是 0.2.2-alpha.3 起对第三方插件暴露的真实回归。本插件在 `src/compat/panel-channel.ts` 里结构化探测：先试 `rpc.handle`，失败则用 `connection.admit()` 做认证围栏、直接在 `webServer` 上注册同一条 prefix 命名路由，并复刻 `rpc.handle` 的 RPC 信封 framing（状态码、`gateway/bad-request`、`{type:'server-response',rpcId,result}` 响应形状一致）。
+- **组合 base patch（alpha.3）**：`dsh-base/cordis.patch.yml` 给 `fs-observation-policy` 加 `disabled: true`、给 `tool-fs` 加 `config.applyPatch: false`。本插件 patch 只追加自己的三行，组合冒烟对全量行做逐字节对照，不受影响。
+- **客户端接缝（alpha.3）**：`ui-sidebar-right` 的 tab 注册面保持不变；新增 `SidebarRightTabInfo.panel.isFloating`、`openResource` 的 `destination`、`contextMenu.*` 槽与 `ctx.contextMenus` 注入，均为增量。`ui-primitives` 只新增导出（`MENU_TRANSITION_MS`、`useMarkdownDelegate`、`MarkdownMenuTarget`），`Menu` 新增可选 `disabledReason`，本插件使用的控件 API 不变。`ui-plugin-manager` 的改动集中在安装对话框的失败阶段与日志路径，`plugins.bundle.config` 贡献契约不变。
+- **`dsh-llm` 的 `purpose` 类型（alpha.3）**：`GenerateOptions.purpose` 由固定联合改为 `LlmRequestPurposeMap` 声明键；构造请求的生产方须导入自己的包以加载 augmentation。本插件只读 `options.purpose`，按字符串比较（`'auto-review'`），不依赖该键是否在本地类型可见。
+- **`util/values` 重写（alpha.3）**：本插件只把 `dsh-util-values` 作为宿主服务包版本证据，不导入其导出，无需适配。
 
 当前支持版本以 [`SUPPORTED_DSH_RELEASES`](../../src/compat/dsh-version.ts) 为准；验证结果见[路线图兼容性验收记录](../plans/completed/2026-10-20-auto-review-panel.md#兼容性验收记录)。
 

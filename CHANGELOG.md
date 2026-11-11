@@ -20,3 +20,5 @@ English: [CHANGELOG.en.md](./CHANGELOG.en.md)
 - 审查记录持久化（M4）：完整审查产物——请求全文、四节解析结构、推理、裁决、关联与宿主佐证——以 append-only JSONL 落盘于 `<DSH_HOME>/auto-review-panel/v1/`（每会话一份 `sessions/*.jsonl` + 全局 `unassigned.jsonl`），`dsh` 重启后按会话恢复，Auto Review 停用或会话离开 Auto preset 后历史照常展示；写入经原子写与文件锁（上游包缺席时自动退化），`session/flush` 作持久化屏障；任何存储失败都不会影响捕获、工具执行或裁决。
 - 留存与清理（M4）：插件管理页本插件条目的 `auto-review-panel` 配置页提供三个留存轴（每会话记录数 / 保留会话数 / 总大小 MB，默认全 `0` = 不限）与经确认的「清理全部历史」；面板列表支持「加载更早」键集分页，翻页期间暂停自动刷新。
 - 验收：`pnpm smoke:live` 以官方 `@deepseek-ai/dsh-experimental-auto-review@0.2.1-rc.2`（npm `next`）在真实组合 web/headless profile 上跑通 §6 全项，含落盘文件、stats/settings 端点与重启恢复断言。
+
+- 兼容 DSH `0.2.2-alpha.3` 与 `0.2.2-rc.1`（支持清单扩到 `0.2.1-rc.2`–`0.2.2-rc.1`）：审查流识别读取 reviewer 自报的 `purpose: 'auto-review'` 身份（该请求同时携带被审查会话的 `sessionId` 作为模型不可见的传输元数据），旧版"无身份"形状继续识别；面板通道在 cordis 定义站点式服务解析下自动从 `connection.rpc.handle` 回退到 `webServer` 命名路由（认证仍走 `connection.admit`，错误码与响应信封与上游一致），无可认证围栏时如实不挂通道。宿主版本仍不在清单内时插件照旧不启动、行为等同没装。

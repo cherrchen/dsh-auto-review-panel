@@ -31,7 +31,7 @@ tools/pre-execute listener（挂载后一个 macrotask 延迟的 prepend）
    │  attachHostOutcome()（仅 correlation.callId 已知的记录）
 session/event observer（tool/result、approval/asked、approval/decided）→ hostOutcome
    ▼
-PANEL_CHANNEL（connection.rpc.handle）
+PANEL_CHANNEL（connection.rpc.handle，或 webServer 命名路由回退）
    list(sessionId?, before?, limit?) → {records: Summary[], status{…}, page{hasMore, before?}}
    get(id, sessionId?) → 完整 ReviewRecord
    stats() / update-settings({retention}) / clear({confirm:true})
@@ -115,7 +115,9 @@ listener 顺序不是公开契约：如果某个纤维比我们更晚 prepend，
 
 ## 4. 通道与空态事实
 
-`PANEL_CHANNEL = '/auto-review-panel'`（`src/contract.ts`）经 `connection.rpc.handle` 挂载。挂载是软接缝：`ctx.inject(['connection','webServer'], ctx => ctx.root.get('connection'))`——`ctx.root` 读法照搬 multi-root，因为 `rpc.handle` 要把 `webServer` 解析为读取上下文上的属性，本插件 fiber 看不到兄弟行的服务。headless 组合没有这两个服务，回调不执行，捕获照常工作、通道缺席不是错误。
+`PANEL_CHANNEL = '/auto-review-panel'`（`src/contract.ts`）在 `ctx.inject(['connection','webServer'], …)` 里挂载（`src/channel.ts`）。挂载是软接缝：headless 组合没有这两个服务，回调不执行，捕获照常工作、通道缺席不是错误。
+
+具体落在哪个宿主接缝由 `src/compat/panel-channel.ts` 结构化决定：优先 `connection.rpc.handle(channel, handler)`；该 API 在 cordis 4.0.6-alpha.2（DSH 0.2.2-alpha.3 起）的服务解析变更下会因 `owner.webServer` 按**定义站点**解析而抛 `cannot get property "webServer" without inject`，此时回退为在 `webServer` 上注册同一条 prefix 命名路由，认证仍走 `connection.admit()`，并复刻 `rpc.handle` 的信封 framing——两条接缝交给同一个端点体，端点实现不感知传输。回退要求 `admit` 存在；缺认证围栏时宁可不挂通道，绝不暴露未认证路由。
 
 端点五个，返回值是 carrier-neutral 的 `{ok:true,value} | {ok:false,error}` 信封：
 
