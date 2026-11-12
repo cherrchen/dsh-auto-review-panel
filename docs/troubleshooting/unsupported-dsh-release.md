@@ -72,12 +72,14 @@
 
 - 短期：把宿主降/升到 `SUPPORTED_DSH_RELEASES` 里的某个版本。
 - 长期（想让插件支持这个新版本）：这是一次人工提升，不能靠 CI 自动完成。
-  1. 在插件仓库里把 pin 指向候选版本并安装：
+  1. 确认候选版本已经发布到 npm（`npm view @deepseek-ai/dsh@<版本> version`），然后在插件仓库里把 pin 指向它并安装：
 
      ```bash
-     node scripts/upgrade-dsh.mjs 0.2.2-rc.1
+     node scripts/upgrade-dsh.mjs 0.2.2-rc.2
      pnpm install --no-frozen-lockfile --config.minimumReleaseAge=0
      ```
+
+     未发布的版本无法安装，CI 矩阵腿也会在同一处 404；先在隔离目录用上游 tag 构建、链接验证，发布后再走这条提升路径。
 
   2. 用放宽开关跑完整矩阵（见下）：
 

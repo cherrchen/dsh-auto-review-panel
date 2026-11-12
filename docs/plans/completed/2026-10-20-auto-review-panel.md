@@ -107,6 +107,27 @@
   - alpha.2 回归：在隔离 worktree 中把 pin 切回 `0.2.2-alpha.2`（旧版 `rpc.handle` 接缝 + 无身份指纹），`compat:check`、`verify:all`（199 通过 / 1 跳过；组合与 packed 各 17 项）与 `smoke:live` 69/69 全部通过。该复现必须沿用 alpha.2 时代的 lockfile：`upgrade-dsh.mjs` 只钉 DSH 包与 cordis，`cordis-plugin-loader`/`-include` 的 `~1.0.7-alpha.1`/`~1.0.11-alpha.1` 范围会解析到 alpha.2 伙伴版本，与 cordis `4.0.6-alpha.1` 的 peer 不匹配、profile 起不来——这是升级车道复现旧版本的既有限制（`verify:all` 与组合冒烟不受影响），不是本插件的行为变化。
 - 主工作区移除候选 probe overrides，保持 `0.2.2-rc.1` 开发基线；本次不创建发布 tag。
 
+### 2026-11-11：0.2.2-rc.2 支持
+
+- 支持清单扩展为 `0.2.1-rc.2` … `0.2.2-rc.2`；`0.2.2-rc.2` 的 npm 产物尚未发布（registry 上 `@deepseek-ai/dsh` 的最新发布仍是 `0.2.2-rc.1`），因此开发 pin、lockfile 与 release-age 精确条目都保持在 `0.2.2-rc.1`——把 manifest 指向一个不可安装的版本会破坏 `pnpm install --frozen-lockfile` 与整条 CI 主车道。发布后按升级车道把 pin 重指到 rc.2，rc.2 的矩阵腿即可转绿。
+- 上游差异与插件应对（详见[上游调研 §0.2.2-rc.2 复核](../../reference/upstream-auto-review.md#0222-rc2-复核2026-11-11)）：`auto-review`/`permission-presets` 仅版本号变化；`dsh-tools` 的 guard/deny 结构化身份与 `dsh-session` 的批量 append 都是附加面；`dsh-llm` 的错误基类迁移与 retry policy 调整不改变 `llm/stream` 签名；客户端 `Menu` 定位重写、`hoc` 槽、`ui-plugin-manager` 的 `update` 字段与 `sidebar.panel.icon` factory（`sidebar.panellist` 移入其下）均不触及本插件注册面。结论：无新增运行时适配分支。
+- 验证（macOS arm64 / Node.js `24.18.0`；上游 `dsh-v0.2.2-rc.2` 以 `git archive` 解出到隔离目录，构建 host libraries 与 client 声明后，把本仓库依赖链接到该树）：
+  - `pnpm typecheck`（host + client）、`pnpm build` 通过；
+  - 单测 10 个文件、200 通过 / 1 个候选车道专用测试跳过；
+  - `pnpm compat:check`（临时把开发 pin 与安装树都指向 rc.2）通过；
+  - `pnpm smoke:compose` 17/17、`pnpm pack:check` 通过、`pnpm smoke:packed` 17/17（`DSH_CLI` 指向 rc.2 构建产物）；
+  - `pnpm lint`、`pnpm docs:check` 通过。
+  - `pnpm smoke:live` 未执行：脚本要求官方 reviewer 与宿主同版本的 npm 产物，`@deepseek-ai/dsh-experimental-auto-review@0.2.2-rc.2` 同样尚未发布；发布后在正式 pin 上补跑（见下节）。
+- 主工作区最终保持 `0.2.2-rc.1` 安装树与开发 pin；本次不创建发布 tag。
+
+### 2026-11-12：0.2.2-rc.2 发布后提升为开发基线
+
+- `@deepseek-ai/dsh@0.2.2-rc.2` 与 `@deepseek-ai/dsh-experimental-auto-review@0.2.2-rc.2` 已在 npm（`next` dist-tag），上一节留下的发布前置条件解除。
+- 按升级车道把开发 pin、lockfile 与 release-age 精确条目从 `0.2.2-rc.1` 重指到 `0.2.2-rc.2`（`node scripts/upgrade-dsh.mjs 0.2.2-rc.2` + `pnpm install --no-frozen-lockfile --config.minimumReleaseAge=0`）；cordis 仍为 `4.1.0`。探针产出的临时 workspace overrides 已移除，`pnpm install --frozen-lockfile` 在正式配置下通过。
+- rc.2 相对 rc.1 新引入的 13 个包（`dsh-error`、`dsh-agent-team`、`dsh-tool-agent-team`、`dsh-office-kit`、`dsh-terminal-panel`、`dsh-fs-patch`、`dsh-mcp-manager`、`dsh-util-ripgrep`、`dsh-tool-office` 与四个客户端包）补入 `minimumReleaseAgeExclude` 的精确条目——它们没有更早版本的豁免可用，缺条目会让 frozen install 的发布年龄校验失败。
+- 验证（macOS arm64 / Node.js `24.18.0`，正式 enforce 门禁）：`pnpm compat:check`（允许清单 / peers / 开发 pin / 安装树四者一致，均为 `0.2.2-rc.2`）、`pnpm lint`、`pnpm typecheck`、`pnpm build`、`pnpm test`（10 个文件，200 通过 / 1 个候选车道专用跳过）、`pnpm smoke:compose` 17/17、`pnpm pack:check`、`pnpm smoke:packed` 17/17、`pnpm docs:check` 全部通过；`pnpm smoke:live` 69/69——以官方 reviewer `@deepseek-ai/dsh-experimental-auto-review@0.2.2-rc.2` 覆盖 allow、deny+ask、deny+never、故障、空态、持久化、清理与重启恢复。
+- 本次不创建发布 tag。
+
 ## 里程碑纪律
 
 - 每个 M 有对应的 `plans/active|completed/YYYY-MM-DD-mN-*.md`；完成即迁移到 `completed/` 并在本表标注"随 `vX.Y.Z` 发版"。

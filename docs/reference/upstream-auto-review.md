@@ -1,6 +1,6 @@
 # 上游 Auto Review 调研（`0.2.1-rc.2`）
 
-调研日期：2026-10-20；复核至 `dsh-v0.2.2-rc.1`（2026-11-11），各版本增量见下方复核小节。本文记录已核实的上游源码事实，是面板面只读语义的边界依据；上游原始包为 `@deepseek-ai/dsh-experimental-auto-review`，源码位于上游仓库 `packages/experimental/auto-review`。
+调研日期：2026-10-20；复核至 `dsh-v0.2.2-rc.2`（2026-11-11），各版本增量见下方复核小节。本文记录已核实的上游源码事实，是面板面只读语义的边界依据；上游原始包为 `@deepseek-ai/dsh-experimental-auto-review`，源码位于上游仓库 `packages/experimental/auto-review`。
 
 ## 基线与证据范围
 
@@ -34,6 +34,22 @@
 - **`util/values` 重写（alpha.3）**：本插件只把 `dsh-util-values` 作为宿主服务包版本证据，不导入其导出，无需适配。
 
 当前支持版本以 [`SUPPORTED_DSH_RELEASES`](../../src/compat/dsh-version.ts) 为准；验证结果见[路线图兼容性验收记录](../plans/completed/2026-10-20-auto-review-panel.md#兼容性验收记录)。
+
+## 0.2.2-rc.2 复核（2026-11-11）
+
+对比 `dsh-v0.2.2-rc.1` 与 `dsh-v0.2.2-rc.2`（commit `ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c`）：
+
+- **Auto Review 与 permission-presets**：两个包除 `package.json` 版本号外无源码变化；`REVIEW_POLICY`、`messages` 逐条目渲染协议、reviewer 自报的 `purpose: 'auto-review'`/`sessionId` 身份、裁决响应协议与 `tools/pre-execute` 瀑布签名全部原样适用。
+- **`dsh-tools`**：`ToolGuard` 可返回 `string | {reason, info}`，`checkGuards` 相应返回结构化拒绝；`PreToolDecision` 的 `deny` 增加可选 `info`，审批拒绝携带 `ApprovalError` 身份（`APPROVAL_REJECTED`/`APPROVAL_CANCELLED`/`APPROVAL_UNAVAILABLE`），`tool/result` 的 `error` 可落该身份；取消后的未分类抛出也补 `ABORTED` 身份。本插件不注册 guard、不包装 pipeline，只读 `tools/pre-execute` 的 decisions 与 `session/event` 的 `tool/result`；新增 `info` 是附加证据字段，记录与呈现语义不变。
+- **`dsh-session`**：新增批量 `append(inputs)` 与 `session.currentBatchPublication`，单事件 `append` 重构但契约不变——`session/event` 仍逐个事件派发（批量提交后在完整日志上依次发布）；新增 `team/mode` 已知事件类型。本插件只读观察既有事件，不批量写过 Session，不受影响。
+- **`dsh-llm`**：`HarnessError` 迁到 `@deepseek-ai/dsh-error` 并由 `dsh-llm` 重导出（`dsh-llm` 的错误入口不变）；失败码收敛为 `LLM_FAILURE_CODES`/`LlmError.fromFailure`，retry policy 增加可重试码集合与字段下界，tool-update 投影按删除/新增重建声明。`llm/stream` waterfall 签名、`StreamChunk`/`GenerateOptions`（含 `purpose`/`sessionId`）与 finish 结局未变；插件只读 chunk 与 finish，类型仍从 `dsh-llm` 入口导入。
+- **`dsh-agent` / `dsh-agent-loop`**：移除 `CreateAgentOptions.parentAgent`、`AgentRegistry.roots()` 与 `isOwnedBy()`，生命周期信号与取消路径调整。本插件从未使用这些 API，也不读取 agent 运行时父子关系。
+- **客户端槽与控件**：`ui-slots` 新增 `hoc` 槽种类（增量，本插件只用 list/keyed）；`ui-primitives` 的 `Menu` 门户定位改由 CSS anchor positioning 承担（`anchorRef`/`anchorPoint` 取代 `getAnchorRect`，`useAnchoredPosition` 不再导出）——本插件的筛选菜单只用 `Menu portal` + `anchor`，仍受支持；`Modal` 新增可选 `tone`，`RiskConfirmation` 内部改用 `Checkbox`，`Checkbox` 新增可选 `modalAutofocus`，本插件使用的 `SettingsForm`/`SettingsValueField`/`PathLabel`/`JsonTree`/`Tooltip`/`Toast`/`Tag`/`Button`/`DisclosureRow` 导出签名未变；`ui-plugin-manager` 的 `plugins.bundle.config` 契约与 `PluginConfigViewProps` 未变，新增的 `PluginTabUpdate`、卡片 `update`/`statusNotRunning` 与 Git 更新流程都是其它消费面的增量。
+- **侧栏与启动**：`ui-sidebar` 新增 `sidebar.panel.icon` factory，并把 `sidebar.panellist` 移到该 factory 之下（面板导航行复用同一图标面），另增加会话区滚动交接；`ui-sidebar-right` 仅样式调整——本插件的 `sidebarRightTabs.register` 与 `sidebar.right.pane.tab` 注册面不变。`client/web` 把非必需客户端条目的启动失败从“整页拒绝启动”改为逐条告警，必需条目集合（modules/session controller/renderer/layout/session/chat/sidebar）不含本插件；`client/modules` 对条目创建失败记录并继续。
+- **组合与安装**：`app-boot` 的 bundle 平台声明开始接受 `wsl`，Harness-home `.env` 的允许项增加 DeepSeek 端点；`plugin-manager` 支持 Git 安装源的更新、`BundleInfo.updatable` 改为 `update: 'registry' | 'git'`、新增 `unexpected-package` 失败类别；`dsh-base` 的 `cordis.patch.yml` 改了点名（`dsh-deepseek-account-platform` → `dsh-deepseek-account`）并新增 `agent-team` 行。本插件 patch 以 `insert` 追加三行、不依赖这些行的 id 或顺序，组合冒烟在 rc.2 上仍断言“只多三行、其余逐字节相同”。
+- **连接接缝**：`@deepseek-ai/dsh-client-connection` 只有包元数据变化，`rpc.handle` 的缺陷与 `src/compat/panel-channel.ts` 的 `webServer` 命名路由回退原样适用。
+
+结论：`0.2.2-rc.2` 对本插件使用的接缝没有破坏性变化，无新增运行时适配分支；`SUPPORTED_DSH_RELEASES` 的扩展是对“该版本可以被支持”的人工提升。
 
 ## 审查入口与生命周期
 
