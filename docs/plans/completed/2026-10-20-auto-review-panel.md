@@ -117,8 +117,16 @@
   - `pnpm compat:check`（临时把开发 pin 与安装树都指向 rc.2）通过；
   - `pnpm smoke:compose` 17/17、`pnpm pack:check` 通过、`pnpm smoke:packed` 17/17（`DSH_CLI` 指向 rc.2 构建产物）；
   - `pnpm lint`、`pnpm docs:check` 通过。
-  - `pnpm smoke:live` 未执行：脚本要求官方 reviewer 与宿主同版本的 npm 产物，`@deepseek-ai/dsh-experimental-auto-review@0.2.2-rc.2` 同样尚未发布；发布后必须在正式 pin 上补跑。
+  - `pnpm smoke:live` 未执行：脚本要求官方 reviewer 与宿主同版本的 npm 产物，`@deepseek-ai/dsh-experimental-auto-review@0.2.2-rc.2` 同样尚未发布；发布后在正式 pin 上补跑（见下节）。
 - 主工作区最终保持 `0.2.2-rc.1` 安装树与开发 pin；本次不创建发布 tag。
+
+### 2026-11-12：0.2.2-rc.2 发布后提升为开发基线
+
+- `@deepseek-ai/dsh@0.2.2-rc.2` 与 `@deepseek-ai/dsh-experimental-auto-review@0.2.2-rc.2` 已在 npm（`next` dist-tag），上一节留下的发布前置条件解除。
+- 按升级车道把开发 pin、lockfile 与 release-age 精确条目从 `0.2.2-rc.1` 重指到 `0.2.2-rc.2`（`node scripts/upgrade-dsh.mjs 0.2.2-rc.2` + `pnpm install --no-frozen-lockfile --config.minimumReleaseAge=0`）；cordis 仍为 `4.1.0`。探针产出的临时 workspace overrides 已移除，`pnpm install --frozen-lockfile` 在正式配置下通过。
+- rc.2 相对 rc.1 新引入的 13 个包（`dsh-error`、`dsh-agent-team`、`dsh-tool-agent-team`、`dsh-office-kit`、`dsh-terminal-panel`、`dsh-fs-patch`、`dsh-mcp-manager`、`dsh-util-ripgrep`、`dsh-tool-office` 与四个客户端包）补入 `minimumReleaseAgeExclude` 的精确条目——它们没有更早版本的豁免可用，缺条目会让 frozen install 的发布年龄校验失败。
+- 验证（macOS arm64 / Node.js `24.18.0`，正式 enforce 门禁）：`pnpm compat:check`（允许清单 / peers / 开发 pin / 安装树四者一致，均为 `0.2.2-rc.2`）、`pnpm lint`、`pnpm typecheck`、`pnpm build`、`pnpm test`（10 个文件，200 通过 / 1 个候选车道专用跳过）、`pnpm smoke:compose` 17/17、`pnpm pack:check`、`pnpm smoke:packed` 17/17、`pnpm docs:check` 全部通过；`pnpm smoke:live` 69/69——以官方 reviewer `@deepseek-ai/dsh-experimental-auto-review@0.2.2-rc.2` 覆盖 allow、deny+ask、deny+never、故障、空态、持久化、清理与重启恢复。
+- 本次不创建发布 tag。
 
 ## 里程碑纪律
 
