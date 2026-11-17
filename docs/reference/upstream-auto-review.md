@@ -1,6 +1,6 @@
 # 上游 Auto Review 调研（`0.2.1-rc.2`）
 
-调研日期：2026-10-20；复核至 `dsh-v0.2.2-rc.2`（2026-11-11），各版本增量见下方复核小节。本文记录已核实的上游源码事实，是面板面只读语义的边界依据；上游原始包为 `@deepseek-ai/dsh-experimental-auto-review`，源码位于上游仓库 `packages/experimental/auto-review`。
+调研日期：2026-10-20；复核至 `dsh-v0.2.2-rc.3`（2026-11-17），各版本增量见下方复核小节。本文记录已核实的上游源码事实，是面板面只读语义的边界依据；上游原始包为 `@deepseek-ai/dsh-experimental-auto-review`，源码位于上游仓库 `packages/experimental/auto-review`。
 
 ## 基线与证据范围
 
@@ -50,6 +50,21 @@
 - **连接接缝**：`@deepseek-ai/dsh-client-connection` 只有包元数据变化，`rpc.handle` 的缺陷与 `src/compat/panel-channel.ts` 的 `webServer` 命名路由回退原样适用。
 
 结论：`0.2.2-rc.2` 对本插件使用的接缝没有破坏性变化，无新增运行时适配分支；`SUPPORTED_DSH_RELEASES` 的扩展是对“该版本可以被支持”的人工提升。
+
+## 0.2.2-rc.3 复核（2026-11-17）
+
+对比 `dsh-v0.2.2-rc.2` 与 `dsh-v0.2.2-rc.3`（commit `38a6a5c965aa99ab525161efb7cc5cf1fe62fced`）：
+
+- **宿主接缝全部只有版本号变化**：`auto-review`、`permission-presets`、`session`、`tools`、`llm`、`agent`、`agent-instructions`、`home-paths`、`atomic-write` 九个包在 rc.2→rc.3 之间除 `package.json` 版本号外无源码或测试变化（逐包 `git diff --name-only` 核对，命中 0 个非 manifest 文件）。因此 `REVIEW_POLICY`、`messages` 逐条目渲染协议、reviewer 自报的 `purpose: 'auto-review'`/`sessionId` 身份、裁决响应协议、`llm/stream` 瀑布签名、`tools/pre-execute` 瀑布与 `session/event` 观察面、`session/flush` 持久化屏障、以及 `dsh-home-paths`/`dsh-atomic-write` 的动态 `import()` 面全部原样适用。
+- **`ui-sidebar` 新增 `sidebar.session.action` HOC 槽**：New-session 行改为由 `.newSessionRow` 容器内的 `sidebar.session.action` HOC 层渲染（occupant 收到 shell 的 Tooltip+按钮作为 `children`，可包裹或追加自己的控件）；`SidebarRootComponentProps` 的槽联合类型只新增该成员，既有的 `sidebar.footer.action`、`sidebar.workspaces`、`sidebar.settings` 等声明未变。本插件不注册该槽（面板挂在 `sidebar.right`），`sidebarRightTabs.register` 与 `sidebar.right.pane.tab` 注册面不变。
+- **`ui-primitives` 仅新增图标**：`upload-outline` artwork 与 `IconUploadOutlineRegular`/`IconUploadOutlineMedium` 两个导出，供新增的导入 bundle 使用；本插件使用的控件导出签名未变。
+- **`ui-workspace` 新增 `workspace.picker` Component Factory 与第三个目录流槽**：空白会话 hero 的 Workspace picker 被抽成可复用的 factory（`SlotFactoryMap['workspace.picker']`，children 声明 `workspace.picker.directoryFlow` single 槽），`WorkspacePicker.tsx` 改为渲染同一个 picker；`ui-directory-picker-browse`/`ui-directory-picker-native` 把各自流程组件注册进第三个目录流槽。`conversation.hero.workspace` 与 `sidebar.workspaces` 的既有注册语义未变，且本插件不消费这些槽。
+- **新增 experimental bundle `@deepseek-ai/dsh-deepseek-chat-import`**：rc.3 唯一新增的 DSH 包（无删除或改名），host+client 双半部；`official-bundles` 把它加入 `OPTIONAL_BUNDLES`、`MORE_BUNDLES` 与 `EXPERIMENTAL_BUNDLES`。本插件不依赖它，插件管理器列表的增量不影响本插件条目。
+- **`session-log-export` 的导出健壮性**：导出 zip 时，不可读的附件引用（`isUnreadableReference`）改为跳过并汇总为 `attachments-missing.txt`，附件流提前结束时关闭已打开的流。本插件不使用该包。
+- **上游内部调整**：`cordis-client-runner` 的 slot catalog 与 `tool-cordis` 的 api catalog 随新槽与新 API 重新生成（数据面）；desktop installer 的重启状态、CI 脚本、文档与快照更新属于上游发布流程，与本插件无关。
+- **组合与安装**：本插件 patch 仍以 `insert` 追加三行；组合冒烟在 rc.3 上仍断言"只多三行、其余逐字节相同"。完整安装树里全部 331 个 `@deepseek-ai/dsh*` 包都在 `0.2.2-rc.3`（无混装）。
+
+结论：`0.2.2-rc.3` 对本插件使用的接缝没有变化，无新增运行时适配分支；`SUPPORTED_DSH_RELEASES` 的扩展是对"该版本可以被支持"的人工提升。
 
 ## 审查入口与生命周期
 
