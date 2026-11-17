@@ -128,6 +128,14 @@
 - 验证（macOS arm64 / Node.js `24.18.0`，正式 enforce 门禁）：`pnpm compat:check`（允许清单 / peers / 开发 pin / 安装树四者一致，均为 `0.2.2-rc.2`）、`pnpm lint`、`pnpm typecheck`、`pnpm build`、`pnpm test`（10 个文件，200 通过 / 1 个候选车道专用跳过）、`pnpm smoke:compose` 17/17、`pnpm pack:check`、`pnpm smoke:packed` 17/17、`pnpm docs:check` 全部通过；`pnpm smoke:live` 69/69——以官方 reviewer `@deepseek-ai/dsh-experimental-auto-review@0.2.2-rc.2` 覆盖 allow、deny+ask、deny+never、故障、空态、持久化、清理与重启恢复。
 - 本次不创建发布 tag。
 
+### 2026-11-17：0.2.2-rc.3 支持提升
+
+- 支持清单扩展为 `0.2.1-rc.2` … `0.2.2-rc.3`；`@deepseek-ai/dsh@0.2.2-rc.3` 与官方 reviewer `@deepseek-ai/dsh-experimental-auto-review@0.2.2-rc.3` 均已在 npm `next`，因此支持清单、peer 范围、开发 pin、lockfile 与 release-age 精确条目在同一次改动里一起提升到 `0.2.2-rc.3`（cordis 仍为 `4.1.0`）。
+- 上游差异与插件应对（详见[上游调研 §0.2.2-rc.3 复核](../../reference/upstream-auto-review.md#0222-rc3-复核2026-11-17)）：九个宿主接缝包（`auto-review`、`permission-presets`、`session`、`tools`、`llm`、`agent`、`agent-instructions`、`home-paths`、`atomic-write`）逐包核对只有 `package.json` 版本号变化；客户端 `sidebar.right.pane.tab`、`plugins.bundle.config`、`ui-slots`、`ui-plugin-manager`、`ui-sidebar-right`、`client-connection` 等本插件使用的包无源码变化；rc.3 的源码增量（`sidebar.session.action` HOC 槽、上传图标、`workspace.picker` Factory、新增 `dsh-deepseek-chat-import` bundle、session-log-export 附件健壮性）都不在本插件消费面上。结论：无新增运行时适配分支。
+- rc.3 唯一新增的 DSH 包 `@deepseek-ai/dsh-deepseek-chat-import` 补入 `minimumReleaseAgeExclude` 精确条目；升级探针产生的临时 workspace overrides 已移除，`pnpm install --frozen-lockfile` 在正式配置（默认发布年龄门禁）下通过；安装树里 331 个 `@deepseek-ai/dsh*` 包全部为 `0.2.2-rc.3`，无混装。
+- 验证（macOS arm64 / Node.js `24.18.0` / pnpm `11.25.0`，正式 enforce 门禁）：`pnpm compat:check`（allowlist / peers / 开发 pin / 安装树四者一致）、`pnpm lint`、`pnpm typecheck`、`pnpm build`、`pnpm test`（10 个文件，201 通过 / 1 个候选车道专用跳过）、`pnpm smoke:compose` 17/17、`pnpm pack:check`、`pnpm smoke:packed` 17/17、`pnpm docs:check` 全部通过；`pnpm smoke:live` **69/69**——官方 reviewer `@deepseek-ai/dsh-experimental-auto-review@0.2.2-rc.3` 经真实 `dsh plugin add` 从 npm 装入 scratch web/headless 组合，覆盖 allow、deny+ask、deny+never、malformed、reviewer 断流、noreach 空态、持久化、stats/settings 端点与重启恢复。
+- 主工作区保持 `0.2.2-rc.3` 安装树与开发 pin；本次不创建发布 tag。
+
 ## 里程碑纪律
 
 - 每个 M 有对应的 `plans/active|completed/YYYY-MM-DD-mN-*.md`；完成即迁移到 `completed/` 并在本表标注"随 `vX.Y.Z` 发版"。
