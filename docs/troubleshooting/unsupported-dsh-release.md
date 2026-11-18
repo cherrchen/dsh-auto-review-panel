@@ -75,7 +75,7 @@
   1. 确认候选版本已经发布到 npm（`npm view @deepseek-ai/dsh@<版本> version`），然后在插件仓库里把 pin 指向它并安装：
 
      ```bash
-     node scripts/upgrade-dsh.mjs 0.2.2-rc.3
+     node scripts/upgrade-dsh.mjs 0.2.2-rc.4
      pnpm install --no-frozen-lockfile --config.minimumReleaseAge=0
      ```
 
