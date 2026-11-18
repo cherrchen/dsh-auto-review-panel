@@ -10,10 +10,11 @@ import { setTimeout as pause } from 'node:timers/promises'
 import { bootProfile } from './lib/profile-boot.mjs'
 import {
   ensureProfileCopyImport, installPluginProfile, loadAppBoot, loadRuntimeModule,
-  resolveScratchHome, runDsh,
+  resolveScratchHome, runDsh, runtimeRequire,
 } from './lib/dsh-runtime.mjs'
 
 const OFFICIAL = '@deepseek-ai/dsh-experimental-auto-review'
+const EXPECTED_RELEASE = runtimeRequire()('@deepseek-ai/dsh/package.json').version
 const PROFILE = 'arp-demo'
 const home = process.env.DSH_LIVE_KEEP_HOME ?? resolveScratchHome(`demo-${process.pid}`)
 const app = await loadAppBoot()
@@ -23,7 +24,7 @@ if (process.env.DSH_LIVE_KEEP_HOME === undefined) {
   mkdirSync(home, { recursive: true })
   app.initProfile(dir, ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app'])
   ensureProfileCopyImport(home, PROFILE)
-  if (await runDsh(['plugin', '--profile', PROFILE, 'add', `${OFFICIAL}@0.2.1-rc.2`], { DSH_HOME: home }) !== 0) process.exit(1)
+  if (await runDsh(['plugin', '--profile', PROFILE, 'add', `${OFFICIAL}@${EXPECTED_RELEASE}`], { DSH_HOME: home }) !== 0) process.exit(1)
   if (await installPluginProfile(PROFILE, home) !== 0) process.exit(1)
 }
 

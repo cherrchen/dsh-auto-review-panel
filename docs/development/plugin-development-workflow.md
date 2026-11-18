@@ -7,7 +7,7 @@
 
 | 项 | 值 | 说明 |
 | --- | --- | --- |
-| 开发目标版本（基线） | `0.2.2-rc.3` | 精确 pin 在 `devDependencies`；CI 主车道对全部支持版本与启用的 OS 做笛卡尔积验证 |
+| 开发目标版本（基线） | `0.2.2-rc.4` | 精确 pin 在 `devDependencies`；CI 主车道对全部支持版本与启用的 OS 做笛卡尔积验证 |
 | 支持矩阵 | [`SUPPORTED_DSH_RELEASES`](../../src/compat/dsh-version.ts) | **精确版本 allowlist**；`peerDependencies` 逐项或，不承诺未来版本 |
 | 运行时门禁 | `auto-review-panel-compat` 行 | 版本不在 allowlist 或核心包混装时，inject 门禁的面板行根本不启动（ADR-0001） |
 | cordis | 基线 `4.1.0`；候选版本按 `dsh` 声明的范围精确 pin | `upgrade-dsh.mjs` 同步重指，并从精确 release-age 条目派生 workspace-only 的 DSH probe overrides，避免预发布范围导致混装、重复副本导致 Symbol 不一致。已有自定义 overrides 时拒绝覆盖；探测后恢复 |

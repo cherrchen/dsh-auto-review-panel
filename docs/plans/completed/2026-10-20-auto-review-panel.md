@@ -136,6 +136,14 @@
 - 验证（macOS arm64 / Node.js `24.18.0` / pnpm `11.25.0`，正式 enforce 门禁）：`pnpm compat:check`（allowlist / peers / 开发 pin / 安装树四者一致）、`pnpm lint`、`pnpm typecheck`、`pnpm build`、`pnpm test`（10 个文件，201 通过 / 1 个候选车道专用跳过）、`pnpm smoke:compose` 17/17、`pnpm pack:check`、`pnpm smoke:packed` 17/17、`pnpm docs:check` 全部通过；`pnpm smoke:live` **69/69**——官方 reviewer `@deepseek-ai/dsh-experimental-auto-review@0.2.2-rc.3` 经真实 `dsh plugin add` 从 npm 装入 scratch web/headless 组合，覆盖 allow、deny+ask、deny+never、malformed、reviewer 断流、noreach 空态、持久化、stats/settings 端点与重启恢复。
 - 主工作区保持 `0.2.2-rc.3` 安装树与开发 pin；本次不创建发布 tag。
 
+### 2026-11-18：0.2.2-rc.4 支持提升
+
+- 支持清单扩展为 `0.2.1-rc.2` … `0.2.2-rc.4`；`@deepseek-ai/dsh@0.2.2-rc.4` 与官方 reviewer `@deepseek-ai/dsh-experimental-auto-review@0.2.2-rc.4` 均已在 npm `next`，因此支持清单、peer 范围、开发 pin、lockfile 与 release-age 精确条目在同一次改动里一起提升到 `0.2.2-rc.4`（cordis 仍为 `4.1.0`）。
+- 上游差异与插件应对（详见[上游调研 §0.2.2-rc.4 复核](../../reference/upstream-auto-review.md#0222-rc4-复核2026-11-18)）：rc.4 是 rc.3 的后继（8 个提交），除 manifest 版本号外只有 `dsh-llm` 新增 `CONTENT_REFUSED` 失败码、`llm-deepseek` 把内容安全拒绝从 `MALFORMED_RESPONSE` 改为先出最终 usage 再抛 `CONTENT_REFUSED`、`experimental/liveshare` 的内部修复，以及上游文档/快照更新。`llm/stream` 接缝仍把 adapter 抛出转成唯一终止 `finish` 错误块，插件只读透传并原样记录失败码（`LlmFailure.code` 是普通字符串）；审查器、permission-presets、session、tools、llm 的公共类型与全部客户端包无源码变化，工作区包集合无增删。结论：无新增运行时适配分支。
+- 提升为机械操作：`node scripts/upgrade-dsh.mjs 0.2.2-rc.4` 重指 27 个 DSH devDependencies 与 351 条 release-age 精确条目（无新增包，因此没有新条目）；探针产生的临时 workspace overrides 已移除，`pnpm install --frozen-lockfile` 在正式配置（默认发布年龄门禁）下通过；安装树里 331 个 `@deepseek-ai/dsh*` 包全部为 `0.2.2-rc.4`，无混装。
+- 验证（macOS arm64 / Node.js `24.18.0` / pnpm `11.25.0`，正式 enforce 门禁）：`pnpm compat:check`（allowlist / peers / 开发 pin / 安装树四者一致）、`pnpm lint`、`pnpm typecheck`、`pnpm build`、`pnpm test`（10 个文件，202 通过 / 1 个候选车道专用跳过）、`pnpm smoke:compose` 17/17、`pnpm pack:check`、`pnpm smoke:packed` 17/17、`pnpm docs:check` 全部通过；`pnpm smoke:live` **69/69**——官方 reviewer `@deepseek-ai/dsh-experimental-auto-review@0.2.2-rc.4` 经真实 `dsh plugin add` 从 npm 装入 scratch web/headless 组合，覆盖 allow、deny+ask、deny+never、malformed、reviewer 断流、noreach 空态、持久化、stats/settings 端点与重启恢复。
+- 主工作区保持 `0.2.2-rc.4` 安装树与开发 pin；本次不创建发布 tag。
+
 ## 里程碑纪律
 
 - 每个 M 有对应的 `plans/active|completed/YYYY-MM-DD-mN-*.md`；完成即迁移到 `completed/` 并在本表标注"随 `vX.Y.Z` 发版"。

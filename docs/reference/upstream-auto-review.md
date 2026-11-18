@@ -1,6 +1,6 @@
 # 上游 Auto Review 调研（`0.2.1-rc.2`）
 
-调研日期：2026-10-20；复核至 `dsh-v0.2.2-rc.3`（2026-11-17），各版本增量见下方复核小节。本文记录已核实的上游源码事实，是面板面只读语义的边界依据；上游原始包为 `@deepseek-ai/dsh-experimental-auto-review`，源码位于上游仓库 `packages/experimental/auto-review`。
+调研日期：2026-10-20；复核至 `dsh-v0.2.2-rc.4`（2026-11-18），各版本增量见下方复核小节。本文记录已核实的上游源码事实，是面板面只读语义的边界依据；上游原始包为 `@deepseek-ai/dsh-experimental-auto-review`，源码位于上游仓库 `packages/experimental/auto-review`。
 
 ## 基线与证据范围
 
@@ -65,6 +65,19 @@
 - **组合与安装**：本插件 patch 仍以 `insert` 追加三行；组合冒烟在 rc.3 上仍断言"只多三行、其余逐字节相同"。完整安装树里全部 331 个 `@deepseek-ai/dsh*` 包都在 `0.2.2-rc.3`（无混装）。
 
 结论：`0.2.2-rc.3` 对本插件使用的接缝没有变化，无新增运行时适配分支；`SUPPORTED_DSH_RELEASES` 的扩展是对"该版本可以被支持"的人工提升。
+
+## 0.2.2-rc.4 复核（2026-11-18）
+
+对比 `dsh-v0.2.2-rc.3` 与 `dsh-v0.2.2-rc.4`（commit `3f321d32bfe382212a8ed8785c1d47a5a300aa23`；rc.4 是 rc.3 的后继，8 个提交）：
+
+- **本插件依赖的宿主接缝只有版本号变化**：`auto-review`、`permission-presets`、`session`、`tools`、`agent`、`agent-instructions`、`home-paths`、`atomic-write`，以及本插件使用的全部客户端包（`client-connection`、`client-locale`、`client-store`、`client-ui-*`、`ui-slots`）在 rc.3→rc.4 之间没有非 manifest 改动；工作区包集合也没有新增或删除。因此 `REVIEW_POLICY`、`messages` 逐条目渲染协议、reviewer 自报的 `purpose: 'auto-review'`/`sessionId` 身份、裁决响应协议、`llm/stream` 瀑布签名、`tools/pre-execute` 瀑布与 `session/event` 观察面原样适用。
+- **`dsh-llm` 新增失败码 `CONTENT_REFUSED`**：`packages/llm/llm/src/error.ts` 的 `LLM_FAILURE_CODES` 增加一个条目（不带 `retryChoice`，即不会因此默认重试）。这是纯附加常量，`LlmFailure.code` 仍是普通字符串；本插件把 `finish` 的失败码原样记录、原样呈现，不按码分类。
+- **`llm-deepseek` 的内容安全拒绝改报 `CONTENT_REFUSED`**：DeepSeek 以 `stop_reason: "refusal"` 结束时，rc.3 及更早把它当未知 stop reason、报 `MALFORMED_RESPONSE` 错误 finish；rc.4 先产出最终 `usage`，再抛出带 `CONTENT_REFUSED` 的 `LlmError`（文案保留 provider 的 explanation）。在 `llm/stream` 接缝上，`LlmRuntime.adapterStream` 仍把 adapter 抛出转换成唯一的终止 `finish` 错误块（`adapterFailureChunk`，`ABORTED` 归为 `aborted`），因此本插件的只读 tee 照旧逐块透传，并把 `finish.code` 记为 `CONTENT_REFUSED`——面板只显示这个码，语义不变。
+- **`llm-deepseek` 的 safetyCheck 开关（同一发布内演进）**：rc.4 先加入 `safetyCheck` 配置与类型，随后改为"总是请求内容安全审查"并移除该开关；这属于 provider 插件的内部配置面，本插件不导入 `llm-deepseek`，也不读取 LLM 配置。
+- **`experimental/liveshare`**：Electron Node 模式下的 tunnel worker 启动与测试时钟推导，与本插件无关。
+- **组合与安装**：本插件 patch 仍以 `insert` 追加三行；组合冒烟在 rc.4 上仍断言"只多三行、其余逐字节相同"。完整安装树里 331 个 `@deepseek-ai/dsh*` 包全部为 `0.2.2-rc.4`（无混装），cordis 仍为 `4.1.0`。
+
+结论：`0.2.2-rc.4` 对本插件使用的接缝没有形状变化；唯一可观察到的行为差异是内置 DeepSeek provider 的内容拒绝失败码（`MALFORMED_RESPONSE` → `CONTENT_REFUSED`），它落在本插件"原样记录失败码"的语义内，无新增运行时适配分支；`SUPPORTED_DSH_RELEASES` 的扩展是对"该版本可以被支持"的人工提升。
 
 ## 审查入口与生命周期
 
