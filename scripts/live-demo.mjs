@@ -43,13 +43,22 @@ const { ctx } = await bootProfile(PROFILE, home, prepare)
 
 const { LlmAdapter, ToolCallId, createMessage, createToolResultMessage } = await loadRuntimeModule('@deepseek-ai/dsh-llm')
 const { SessionId } = await loadRuntimeModule('@deepseek-ai/dsh-session')
-const { defineContentToolFixture } = await loadRuntimeModule('@deepseek-ai/dsh-tools')
+const { defineTool, defineContentToolFixture } = await loadRuntimeModule('@deepseek-ai/dsh-tools')
 const { setApprovalPolicy } = await loadRuntimeModule('@deepseek-ai/dsh-user-approval')
 
+// The demo's verdict is keyed on the pending call's `mark` argument. That mark
+// lives in the request's user text — the single PENDING_ACTION section
+// pre-alpha, the final pending-call message since 0.2.2-alpha — so scan every
+// message's text rather than one fixed position. The messages protocol renders
+// call arguments as an escaped JSON string; unescaping restores the marker.
 class Scripted extends LlmAdapter {
   async *stream(options) {
-    const text = options.messages?.[0]?.content?.[0]?.text ?? ''
-    const verdict = /"mark":\s*"deny"/u.test(text)
+    const text = (options.messages ?? [])
+      .map(message => (message.content ?? []).map(block => block.text ?? '').join('\n'))
+      .join('\n')
+      .replaceAll('\\"', '"')
+    const mark = [...text.matchAll(/"mark":\s*"([a-z-]+)"/gu)].at(-1)?.[1]
+    const verdict = mark === 'deny'
       ? '{"risk":"high","decision":"deny","reason":"sends credentials to an external host; the call is refused"}'
       : '{"risk":"low","decision":"allow"}'
     yield { type: 'block-start', index: 0, blockType: 'reasoning' }
@@ -62,41 +71,73 @@ class Scripted extends LlmAdapter {
   }
 }
 ctx.llm.registerAdapter(['live-demo'], new Scripted())
-ctx.tools.register(defineContentToolFixture({
-  name: 'demo_write_file',
-  description: 'A harmless demo write',
-  parameters: { file_path: { type: 'string' }, content: { type: 'string' }, mark: { type: 'string' } },
-  async execute(args) { return [{ type: 'text', text: `wrote ${String(args.file_path)}` }] },
-}))
+
+// `defineTool` (with an explicit output spec) is the stable registration entry
+// across the supported range; the content-array fixture helper it replaced in
+// 0.2.2-alpha is only kept for older runtimes.
+const demoParameters = { file_path: { type: 'string' }, content: { type: 'string' }, mark: { type: 'string' } }
+const demoExecute = async (args) => [{ type: 'text', text: `wrote ${String(args.file_path)}` }]
+ctx.tools.register(defineTool === undefined
+  ? defineContentToolFixture({ name: 'demo_write_file', description: 'A harmless demo write', parameters: demoParameters, execute: demoExecute })
+  : defineTool({
+      name: 'demo_write_file',
+      description: 'A harmless demo write',
+      parameters: demoParameters,
+      output: {
+        schema: { type: 'array', items: { type: 'json' } },
+        render: (_args, value) => value,
+      },
+      execute: demoExecute,
+    }))
 
 const workdir = mkdtempSync(join(tmpdir(), 'arp-demo-'))
 const session = ctx.sessions.create(SessionId('demo-1'), { meta: { cwd: workdir } })
 ctx.permissionPresets.set(session, 'auto')
 const agent = { id: session.id, session, ctx, options: {} }
+// 0.2.2-alpha replaced the single-call execute with the batch API and gave it
+// durable-log ownership: `setExecutor` is the structural marker, and passing
+// `log` makes the executor append tool/call + tool/result itself.
+const batchApi = typeof ctx.tools.setExecutor === 'function'
 let turn = 0
 async function call(mark, file) {
   turn += 1
   const id = ToolCallId(`demo-${turn}`)
+  const name = 'demo_write_file'
   const args = { file_path: file, content: 'demo', mark }
   session.append('turn/start', { turn })
-  session.append('request/header', { header: { config: { provider: 'live-demo', model: 'scripted' }, tools: ctx.tools.schemas() }, reason: 'initial' })
+  session.append('request/header', {
+    header: { config: { provider: 'live-demo', model: 'scripted' }, tools: ctx.tools.schemas() },
+    reason: turn === 1 ? 'initial' : 'change',
+  })
   session.append('step/start', { turn, step: 1 })
   session.append('assistant/message', {
     turn, step: 1, stream: [],
     message: createMessage({
       role: 'assistant', source: { kind: 'model', provider: 'live-demo', model: 'scripted' },
-      content: [{ type: 'tool-call', id, name: 'demo_write_file', arguments: JSON.stringify(args) }],
+      content: [{ type: 'tool-call', id, name, arguments: JSON.stringify(args) }],
     }),
   }, { surfaceOp: 'append' })
-  const callEvent = session.append('tool/call', { turn, step: 1, callId: id, name: 'demo_write_file', arguments: JSON.stringify(args) })
-  const result = await ctx.tools.execute({ callId: id, name: 'demo_write_file', arguments: args, agent, signal: AbortSignal.timeout(30_000) })
-  session.append('tool/result', {
-    turn, step: 1,
-    message: createToolResultMessage({ callId: id, content: result.content, isError: result.isError }),
-    ...(result.error?.info === undefined ? {} : { error: result.error.info }),
-  }, { surfaceOp: 'append', sourceEventSeqs: [callEvent.seq] })
+
+  let result
+  if (batchApi) {
+    const batch = await ctx.tools.execute({
+      calls: [{ type: 'tool-call', id, name, arguments: JSON.stringify(args) }],
+      signal: AbortSignal.timeout(30_000),
+      agent,
+      log: { turn, step: 1 },
+    })
+    result = batch.results[0]?.result
+  } else {
+    const callEvent = session.append('tool/call', { turn, step: 1, callId: id, name, arguments: JSON.stringify(args) })
+    result = await ctx.tools.execute({ callId: id, name, arguments: args, agent, signal: AbortSignal.timeout(30_000) })
+    session.append('tool/result', {
+      turn, step: 1,
+      message: createToolResultMessage({ callId: id, content: result.content, isError: result.isError }),
+      ...(result.error?.info === undefined ? {} : { error: result.error.info }),
+    }, { surfaceOp: 'append', sourceEventSeqs: [callEvent.seq] })
+  }
   session.append('turn/end', { turn, reason: { kind: 'completed' } })
-  console.log(`[demo] ${file}: isError=${result.isError}`)
+  console.log(`[demo] ${file}: isError=${result?.isError}`)
 }
 
 await call('allow', '/tmp/notes.md')
